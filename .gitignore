@@ -1,0 +1,4 @@
+/build/
+/spikes/*/build/
+/spikes/*/out/
+compile_commands.json
