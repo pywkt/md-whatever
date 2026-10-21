@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/">
+    <file>themes/base.css</file>
+    <file>themes/default.css</file>
+    <file>themes/paper.css</file>
+  </qresource>
+</RCC>

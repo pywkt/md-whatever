@@ -1,0 +1,78 @@
+/* paper: a warm, book-like serif theme. Shows how a theme can override the
+   palette variables, with separate light and dark values. */
+
+:root {
+  --body-font: "Noto Serif";
+  --heading-font: "Noto Sans";
+}
+html.light {
+  --bg: #fbf8f1;
+  --text: #2b2926;
+  --muted: #77716a;
+  --faint: #a8a196;
+  --rule: #e2dccf;
+  --code-bg: #f3eee3;
+  --code-border: #e6dfd0;
+  --quote-bg: #f5efe2;
+  --table-head: #f1ebde;
+  --table-stripe: #f8f4ea;
+  --link: #8a4b20;
+  --accent: #b5652c;
+  --accent-text: #ffffff;
+}
+html.dark {
+  --bg: #1e1c19;
+  --text: #e4ddd0;
+  --muted: #a39a8c;
+  --faint: #7a7266;
+  --rule: #3a3631;
+  --code-bg: #27241f;
+  --code-border: #34302a;
+  --quote-bg: #2a2621;
+  --table-head: #2a2621;
+  --table-stripe: #23201c;
+  --link: #e3a46f;
+  --accent: #d0844a;
+  --accent-text: #1e1c19;
+}
+
+body { font-family: var(--body-font), serif; line-height: 1.72; }
+.markdown-body { max-width: 38em; padding-top: 3em; }
+
+h1, h2, h3, h4, h5, h6 { font-family: var(--heading-font), sans-serif; font-weight: 600; }
+h1 { font-size: 2.1em; letter-spacing: -0.01em; margin-top: 0.4em; margin-bottom: 0.8em; }
+h2 { font-size: 1.45em; margin-top: 2em; }
+h3 { font-size: 1.2em; }
+h4, h5, h6 { font-size: 1em; }
+h6 { color: var(--muted); }
+
+a { color: var(--link); text-decoration: none; border-bottom: 1px solid var(--rule); }
+a:hover { border-bottom-color: var(--link); }
+
+code { font-size: 0.85em; background: var(--code-bg); border-radius: 3px; padding: 0.1em 0.32em; }
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  padding: 0.9em 1.15em;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+pre code { background: transparent; padding: 0; font-size: 1em; }
+
+blockquote {
+  margin: 1.2em 0;
+  padding: 0.2em 1.4em;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  font-style: italic;
+}
+
+hr { border-top: 1px solid var(--rule); margin: 2.6em 4em; }
+
+table { border-top: 2px solid var(--text); border-bottom: 2px solid var(--text); }
+th { border-bottom: 1px solid var(--text); font-weight: 600; }
+th, td { padding: 0.4em 0.9em; }
+
+.footnotes { color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1em; }
+code.math-pending, code.math-source, code.math-error { background-color: transparent; padding: 0; }

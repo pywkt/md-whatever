@@ -1,0 +1,80 @@
+/* base.css: structure shared by every theme. Loaded before the theme file,
+   so a theme (or user.css) can override any of it. Sizes are in em so zoom
+   and --base-size scale everything together. */
+
+article, section { display: block; }
+
+html { background: var(--bg); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body-font), sans-serif;
+  font-size: var(--base-size);
+  line-height: 1.65;
+}
+
+.markdown-body {
+  max-width: 46em;
+  margin: 0 auto;
+  padding: 2.4em 2.2em 5em 2.2em;
+}
+
+p, ul, ol, blockquote, table, pre { margin: 0 0 1em 0; }
+ul, ol { padding-left: 1.7em; }
+li { margin: 0.2em 0; }
+li > ul, li > ol { margin: 0.2em 0 0 0; }
+li > p { margin: 0.4em 0; }
+
+h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 1.7em 0 0.6em 0; }
+
+code, pre { font-family: var(--mono-font), monospace; }
+pre { white-space: pre-wrap; }
+
+img { max-width: 100%; }
+img.math { max-width: none; }
+
+table { border-collapse: separate; border-spacing: 0; max-width: 100%; }
+th, td { line-height: 1.45; }
+th { text-align: left; }
+
+hr { height: 0; border: 0; }
+
+/* math */
+.math-display { text-align: center; margin: 1.1em 0; }
+.math-pending, .math-source { color: var(--muted); }
+.math-error { color: var(--error); }
+
+/* task lists */
+li.task-item { list-style-type: none; }
+.task {
+  display: inline-block;
+  width: 1.05em;
+  height: 1.05em;
+  line-height: 1.05em;
+  margin-left: -1.45em;
+  margin-right: 0.4em;
+  text-align: center;
+  font-size: 0.85em;
+  font-weight: bold;
+  border: 1.5px solid var(--faint);
+  border-radius: 0.22em;
+  color: var(--bg);
+  position: relative;
+  top: 0.12em;
+}
+.task.checked { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+
+/* footnotes */
+.footnotes { font-size: 0.88em; margin-top: 3em; }
+sup.footnote-ref { font-size: 0.75em; line-height: 0; }
+a.footnote-back { text-decoration: none; }
+
+/* notices (encoding fallback, unknown theme) */
+.banner {
+  padding: 0.6em 1em;
+  margin-bottom: 1.6em;
+  border-radius: 6px;
+  background: var(--quote-bg);
+  font-size: 0.9em;
+}

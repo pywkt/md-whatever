@@ -1,0 +1,67 @@
+/* default: follows the system palette (Breeze light/dark, accent color)
+   and system fonts. Every color here is a var() set from the palette.
+   Copy this file to ~/.config/mdread/themes/<name>.css to make your own. */
+
+h1, h2, h3, h4, h5, h6 { font-weight: 600; color: var(--text); }
+h1 {
+  font-size: 2.05em;
+  font-weight: 700;
+  margin-top: 0.2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--rule);
+}
+h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--rule);
+}
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+h5 { font-size: 0.95em; }
+h6 { font-size: 0.9em; color: var(--muted); }
+
+strong { font-weight: 650; }
+
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code {
+  font-size: 0.875em;
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.1em 0.36em;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 8px;
+  padding: 0.85em 1.1em;
+  font-size: 0.875em;
+  line-height: 1.5;
+}
+pre code { background: transparent; padding: 0; border-radius: 0; font-size: 1em; }
+
+blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0.55em 1.1em;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  background: var(--quote-bg);
+}
+blockquote p { margin: 0.3em 0; }
+
+hr { border-top: 1px solid var(--rule); margin: 2.2em 0; }
+
+table { border: 1px solid var(--rule); border-radius: 6px; }
+th, td { padding: 0.4em 0.8em; border-bottom: 1px solid var(--rule); }
+td + td, th + th { border-left: 1px solid var(--rule); }
+th { background: var(--table-head); font-weight: 600; }
+tbody tr:nth-child(even) td { background: var(--table-stripe); }
+tbody tr:last-child td { border-bottom: 0; }
+
+img { border-radius: 4px; }
+
+.footnotes { color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1em; }
+
+code.math-pending, code.math-source, code.math-error { background-color: transparent; padding: 0; }
