@@ -8,7 +8,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace mdread {
+namespace mdw {
 
 class Theme
 {
@@ -16,16 +16,16 @@ public:
     // Light/dark: follow the system palette, or force one.
     enum class Appearance { System, Light, Dark };
 
-    // ~/.config/mdread
+    // ~/.config/md-whatever
     static QString configDir();
     static bool isDark(const QPalette &palette);
     // Names of built-in and user themes.
     static QStringList available();
 
-    // Reads mdread.conf, the theme file and user.css. cliTheme overrides the config.
+    // Reads md-whatever.conf, the theme file and user.css. cliTheme overrides the config.
     void load(const QString &cliTheme = QString());
 
-    // Sets KEY=VALUE in mdread.conf, keeping the rest of the file as it is.
+    // Sets KEY=VALUE in md-whatever.conf, keeping the rest of the file as it is.
     static bool saveSetting(const QString &key, const QString &value);
 
     Appearance appearance() const { return m_appearance; }
@@ -53,7 +53,7 @@ public:
     // Effective text color after theme/user overrides of --text (for math).
     QColor textColor(const QPalette &palette, bool dark) const;
 
-    // Files to watch for live restyling (theme file, user.css, mdread.conf).
+    // Files to watch for live restyling (theme file, user.css, md-whatever.conf).
     QStringList watchedFiles() const;
 
 private:
@@ -66,4 +66,4 @@ private:
     QString m_warning;
 };
 
-} // namespace mdread
+} // namespace mdw

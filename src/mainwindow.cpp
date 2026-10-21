@@ -21,7 +21,7 @@
 
 #include <memory>
 
-namespace mdread {
+namespace mdw {
 
 static const QStringList kMarkdownSuffixes = {
     QStringLiteral("md"), QStringLiteral("markdown"), QStringLiteral("mdown"),
@@ -60,7 +60,7 @@ void AppContext::reload()
 void AppContext::setTheme(const QString &name)
 {
     if (!Theme::saveSetting(QStringLiteral("theme"), name))
-        qWarning("mdread: could not write %s/mdread.conf", qPrintable(Theme::configDir()));
+        qWarning("md-whatever: could not write %s/md-whatever.conf", qPrintable(Theme::configDir()));
     m_cliTheme.clear(); // the menu choice wins over --theme from now on
     m_debounce.stop();  // the conf change would trigger the same reload
     reload();
@@ -69,7 +69,7 @@ void AppContext::setTheme(const QString &name)
 void AppContext::setAppearance(Theme::Appearance a)
 {
     if (!Theme::saveSetting(QStringLiteral("appearance"), Theme::appearanceName(a)))
-        qWarning("mdread: could not write %s/mdread.conf", qPrintable(Theme::configDir()));
+        qWarning("md-whatever: could not write %s/md-whatever.conf", qPrintable(Theme::configDir()));
     m_debounce.stop();
     reload();
 }
@@ -87,7 +87,7 @@ void AppContext::rewatch()
     if (!files.isEmpty())
         m_watcher.addPaths(files);
     QStringList dirs;
-    // ~/.config too, so creating ~/.config/mdread while the app runs is noticed.
+    // ~/.config too, so creating ~/.config/md-whatever while the app runs is noticed.
     for (const QString &d : {QFileInfo(Theme::configDir()).absolutePath(), Theme::configDir(),
                              Theme::configDir() + QStringLiteral("/themes")})
         if (QFileInfo(d).isDir())
@@ -138,7 +138,7 @@ MainWindow::MainWindow(AppContext &ctx)
     connect(m_viewer, &Viewer::contextMenuRequested, this, &MainWindow::showContextMenu);
     connect(m_viewer, &Viewer::firstPaint, this, [this] {
         timing::mark("first paint");
-        if (qEnvironmentVariableIsSet("MDREAD_QUIT_AFTER_PAINT") && m_pendingMath.isEmpty())
+        if (qEnvironmentVariableIsSet("MDW_QUIT_AFTER_PAINT") && m_pendingMath.isEmpty())
             QTimer::singleShot(0, qApp, &QApplication::quit);
         if (m_pendingMath.isEmpty())
             maybeScreenshot();
@@ -317,15 +317,15 @@ void MainWindow::onMathResults()
 
 QString MainWindow::currentHtml() const { return m_html; }
 
-// Developer aid: MDREAD_SCREENSHOT=out.png saves the window once text and
-// math are rendered, then quits. MDREAD_SCREENSHOT_SCROLL=0..1 scrolls first.
+// Developer aid: MDW_SCREENSHOT=out.png saves the window once text and
+// math are rendered, then quits. MDW_SCREENSHOT_SCROLL=0..1 scrolls first.
 void MainWindow::maybeScreenshot()
 {
-    const QString out = qEnvironmentVariable("MDREAD_SCREENSHOT");
+    const QString out = qEnvironmentVariable("MDW_SCREENSHOT");
     if (out.isEmpty() || !m_pendingMath.isEmpty())
         return;
-    if (qEnvironmentVariableIsSet("MDREAD_SCREENSHOT_SCROLL"))
-        m_viewer->setScrollRatio(qEnvironmentVariable("MDREAD_SCREENSHOT_SCROLL").toDouble());
+    if (qEnvironmentVariableIsSet("MDW_SCREENSHOT_SCROLL"))
+        m_viewer->setScrollRatio(qEnvironmentVariable("MDW_SCREENSHOT_SCROLL").toDouble());
     QTimer::singleShot(30, this, [this, out] {
         grab().save(out);
         qApp->quit();
@@ -361,7 +361,7 @@ void MainWindow::onFileChanged()
 void MainWindow::updateTitle()
 {
     const QString name = m_path.isEmpty() ? tr("(stdin)") : QFileInfo(m_path).fileName();
-    setWindowTitle(name + QStringLiteral(" — mdread"));
+    setWindowTitle(name + QStringLiteral(" — md-whatever"));
 }
 
 void MainWindow::onLinkClicked(const QUrl &raw)
@@ -461,7 +461,7 @@ QMenu *MainWindow::createContextMenu()
                     [this] { m_findBar->activate(); });
     menu->addSeparator();
 
-    // Theme submenu: built-ins, then ~/.config/mdread/themes/*.css.
+    // Theme submenu: built-ins, then ~/.config/md-whatever/themes/*.css.
     QMenu *themes = menu->addMenu(QIcon::fromTheme(QStringLiteral("preferences-desktop-theme")), tr("Theme"));
     auto *group = new QActionGroup(themes);
     for (const QString &name : Theme::available()) {
@@ -526,4 +526,4 @@ void MainWindow::closeEvent(QCloseEvent *e)
     QWidget::closeEvent(e);
 }
 
-} // namespace mdread
+} // namespace mdw

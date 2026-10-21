@@ -1,4 +1,4 @@
-// mdread math helper: TeX -> SVG with MathJax 4, run under node.
+// md-whatever math helper: TeX -> SVG with MathJax 4, run under node.
 //
 // Usage: node mathjax-helper.cjs <mathjax-dir> <font-dir>
 // Protocol: one JSON object per line on stdin  {"id": "...", "tex": "...", "display": bool}

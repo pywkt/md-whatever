@@ -5,7 +5,7 @@ tags: [test, fixture]
 
 # Kitchen Sink
 
-Every construct mdread must render. Front matter above this heading is hidden.
+Every construct md-whatever must render. Front matter above this heading is hidden.
 Jump to [the tables section](#tables) or the [footnotes](#footnotes-section).
 
 ## Inline formatting
@@ -86,7 +86,7 @@ int main() {
 ```
 
 ```bash
-for f in *.md; do mdread "$f" & done
+for f in *.md; do md-whatever "$f" & done
 ```
 
 ```rust
@@ -97,7 +97,7 @@ fn main() {
 ```
 
 ```json
-{ "name": "mdread", "version": "0.1.0", "offline": true }
+{ "name": "md-whatever", "version": "0.1.0", "offline": true }
 ```
 
 ```nosuchlanguage

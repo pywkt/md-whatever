@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-namespace mdread::timing {
+namespace mdw::timing {
 namespace {
 QElapsedTimer g_timer;
 bool g_enabled = false;

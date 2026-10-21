@@ -7,7 +7,7 @@
 #include <QList>
 #include <QString>
 
-namespace mdread {
+namespace mdw {
 
 class Highlighter;
 
@@ -30,4 +30,4 @@ BuiltDocument buildDocument(const BuildInput &in, Highlighter &hl);
 // Markdown text for error pages (missing file, no permission, ...).
 QString errorMarkdown(const QString &title, const QString &detail);
 
-} // namespace mdread
+} // namespace mdw

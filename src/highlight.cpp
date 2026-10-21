@@ -11,7 +11,7 @@
 
 namespace KSH = KSyntaxHighlighting;
 
-namespace mdread {
+namespace mdw {
 
 namespace {
 
@@ -128,4 +128,4 @@ std::string Highlighter::render(std::string_view langView, std::string_view code
     return "<pre class=\"code\"" + langAttr + "><code>" + h.html.toStdString() + "</code></pre>\n";
 }
 
-} // namespace mdread
+} // namespace mdw

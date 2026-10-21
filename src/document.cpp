@@ -3,7 +3,7 @@
 #include "markdown.h"
 #include "theme.h"
 
-namespace mdread {
+namespace mdw {
 
 static std::string emNum(double v)
 {
@@ -34,7 +34,7 @@ BuiltDocument buildDocument(const BuildInput &in, Highlighter &hl)
             std::string style = "width:" + emNum(r->widthEm) + "em;height:" + emNum(r->heightEm) + "em";
             if (!display && r->depthEm > 0)
                 style += ";position:relative;top:" + emNum(r->depthEm) + "em"; // sit on the baseline
-            return wrap("<img class=\"math\" src=\"mdread-math:" + key.toStdString() + "?px="
+            return wrap("<img class=\"math\" src=\"mdw-math:" + key.toStdString() + "?px="
                         + std::to_string(pxPerEm) + "\" alt=\"" + src + "\" style=\"" + style + "\">");
         }
         if (!mathChecked) {
@@ -71,4 +71,4 @@ QString errorMarkdown(const QString &title, const QString &detail)
     return QStringLiteral("# %1\n\n`%2`\n").arg(title, d);
 }
 
-} // namespace mdread
+} // namespace mdw

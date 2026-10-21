@@ -11,4 +11,4 @@ foreach(f IN LISTS files)
   endif()
 endforeach()
 # Remove now-empty data directories.
-file(REMOVE_RECURSE "${MDREAD_DATA_DIR}")
+file(REMOVE_RECURSE "${MDW_DATA_DIR}")

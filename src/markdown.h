@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace mdread {
+namespace mdw {
 
 struct RenderHooks {
     // Return HTML for a fenced/indented code block. lang may be empty.
@@ -25,4 +25,4 @@ std::string_view stripFrontMatter(std::string_view text);
 // GitHub-style heading slug: lowercase, spaces -> '-', punctuation dropped.
 std::string slugify(std::string_view text);
 
-} // namespace mdread
+} // namespace mdw

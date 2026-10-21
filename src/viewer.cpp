@@ -7,7 +7,7 @@
 #include <QScrollBar>
 #include <QUrlQuery>
 
-namespace mdread {
+namespace mdw {
 
 static constexpr qint64 kMaxImageBytes = 64 * 1024 * 1024;
 
@@ -22,7 +22,7 @@ Viewer::Viewer(QWidget *parent)
 QByteArray Viewer::loadResource(const QUrl &rawUrl)
 {
     QUrl url = rawUrl.isRelative() ? this->url().resolved(rawUrl) : rawUrl;
-    if (url.scheme() == QLatin1String("mdread-math")) {
+    if (url.scheme() == QLatin1String("mdw-math")) {
         const double px = QUrlQuery(url).queryItemValue(QStringLiteral("px")).toDouble();
         return MathRenderer::instance().svgForDisplay(url.path(), m_mathColor, px > 0 ? px : 32);
     }
@@ -82,4 +82,4 @@ void Viewer::paintEvent(QPaintEvent *event)
     }
 }
 
-} // namespace mdread
+} // namespace mdw

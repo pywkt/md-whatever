@@ -402,7 +402,7 @@ public:
     QUrl url;
     DocumentContainer documentContainer;
     qreal zoomFactor = 1;
-    int renderedWidth = -1; // mdread patch: skip relayout when the width is unchanged
+    int renderedWidth = -1; // md-whatever patch: skip relayout when the width is unchanged
     QUrl lastHighlightedLink;
 };
 
@@ -772,7 +772,7 @@ void QLiteHtmlWidget::render()
     const QSize vViewportSize = toVirtual(viewport()->size());
     const int scrollbarWidth = style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, this);
     const int w = fullWidth - scrollbarWidth - 2;
-    // mdread patch: layout depends only on the width; a height-only resize
+    // md-whatever patch: layout depends only on the width; a height-only resize
     // (or showing the window) doesn't need a full relayout.
     if (w != d->renderedWidth) {
         d->documentContainer.render(w, vViewportSize.height());

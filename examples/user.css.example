@@ -1,10 +1,10 @@
 /* user.css: small tweaks on top of whichever theme is active.
-   To use: copy this file to ~/.config/mdread/user.css and uncomment what you
+   To use: copy this file to ~/.config/md-whatever/user.css and uncomment what you
    want. It reloads live when you save it, so keep a document open.
    The variables are listed in the README ("Themes"). */
 
 /* A proportional font with a real bold face for reading
-   (the system font here, Dank Mono, has no bold). */
+   (some system fonts, like Dank Mono, have no bold face). */
 /* :root { --body-font: "Noto Sans"; } */
 
 /* Bigger text. */

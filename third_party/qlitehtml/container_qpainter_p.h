@@ -183,7 +183,7 @@ public: // document_container API
     QByteArray m_defaultFontFamilyName = m_defaultFont.family().toUtf8();
     bool m_antialias = true;
     QHash<QUrl, QPixmap> m_pixmaps;
-    // mdread patch: images are decoded on first draw; until then only the
+    // md-whatever patch: images are decoded on first draw; until then only the
     // encoded bytes and the size from the header are kept.
     QHash<QUrl, QByteArray> m_pendingImages;
     QHash<QUrl, QSize> m_imageSizes;

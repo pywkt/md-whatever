@@ -6,7 +6,7 @@
 class QLineEdit;
 class QLabel;
 
-namespace mdread {
+namespace mdw {
 
 class FindBar : public QWidget
 {
@@ -31,4 +31,4 @@ private:
     QLabel *m_status;
 };
 
-} // namespace mdread
+} // namespace mdw

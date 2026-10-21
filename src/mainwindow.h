@@ -13,7 +13,7 @@
 
 class QMenu;
 
-namespace mdread {
+namespace mdw {
 
 class Viewer;
 class FindBar;
@@ -27,10 +27,10 @@ public:
     Theme theme;
     Highlighter highlighter;
 
-    // Switch every window to a theme and remember it in mdread.conf
+    // Switch every window to a theme and remember it in md-whatever.conf
     // (this also drops a --theme given on the command line).
     void setTheme(const QString &name);
-    // Light / dark / follow the system, for every window; saved in mdread.conf.
+    // Light / dark / follow the system, for every window; saved in md-whatever.conf.
     void setAppearance(Theme::Appearance a);
 
 signals:
@@ -107,4 +107,4 @@ private:
     QTimer m_reloadTimer, m_rebuildTimer;
 };
 
-} // namespace mdread
+} // namespace mdw

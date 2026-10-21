@@ -1,4 +1,4 @@
-// mdread: a fast, read-only Markdown viewer.
+// md-whatever: a fast, read-only Markdown viewer.
 #include "mainwindow.h"
 #include "timing.h"
 
@@ -10,7 +10,7 @@
 
 #include <cstdio>
 
-using namespace mdread;
+using namespace mdw;
 
 int main(int argc, char **argv)
 {
@@ -23,9 +23,9 @@ int main(int argc, char **argv)
     QApplication app(argc, argv);
     Q_INIT_RESOURCE(resources); // built-in themes live in a static library
     timing::mark("QApplication ready");
-    QApplication::setApplicationName(QStringLiteral("mdread"));
-    QApplication::setApplicationVersion(QStringLiteral(MDREAD_VERSION));
-    QApplication::setDesktopFileName(QStringLiteral("mdread"));
+    QApplication::setApplicationName(QStringLiteral("md-whatever"));
+    QApplication::setApplicationVersion(QStringLiteral(MDW_VERSION));
+    QApplication::setDesktopFileName(QStringLiteral("md-whatever"));
     QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("text-markdown")));
 
     QCommandLineParser cli;
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 
     QStringList files = cli.positionalArguments();
     if (files.isEmpty()) {
-        std::fputs("mdread: no file given. Usage: mdread FILE [FILE...]  (or - for stdin)\n", stderr);
+        std::fputs("md-whatever: no file given. Usage: md-whatever FILE [FILE...]  (or - for stdin)\n", stderr);
         return 2;
     }
 

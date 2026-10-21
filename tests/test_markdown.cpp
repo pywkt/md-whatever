@@ -3,7 +3,7 @@
 
 #include <QTest>
 
-using namespace mdread;
+using namespace mdw;
 
 static QString render(const char *md, const RenderHooks &hooks = {})
 {

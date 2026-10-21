@@ -6,7 +6,7 @@
 #include <QLineEdit>
 #include <QToolButton>
 
-namespace mdread {
+namespace mdw {
 
 FindBar::FindBar(QWidget *parent)
     : QWidget(parent)
@@ -79,4 +79,4 @@ void FindBar::keyPressEvent(QKeyEvent *e)
     QWidget::keyPressEvent(e);
 }
 
-} // namespace mdread
+} // namespace mdw

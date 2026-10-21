@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace mdread {
+namespace mdw {
 
 std::string escapeHtml(std::string_view s)
 {
@@ -443,4 +443,4 @@ std::string renderMarkdown(std::string_view text, const RenderHooks &hooks)
     return r.take();
 }
 
-} // namespace mdread
+} // namespace mdw

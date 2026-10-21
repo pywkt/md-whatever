@@ -1,5 +1,5 @@
 // Math rendering: TeX -> SVG via a MathJax helper running under node.
-// Results are cached in memory and on disk (~/.cache/mdread/math).
+// Results are cached in memory and on disk (~/.cache/md-whatever/math).
 #pragma once
 
 #include <QByteArray>
@@ -11,7 +11,7 @@
 #include <QString>
 #include <optional>
 
-namespace mdread {
+namespace mdw {
 
 struct MathResult {
     bool error = false;
@@ -73,4 +73,4 @@ private:
     bool m_flushScheduled = false;
 };
 
-} // namespace mdread
+} // namespace mdw

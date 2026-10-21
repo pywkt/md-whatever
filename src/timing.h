@@ -3,7 +3,7 @@
 
 #include <QElapsedTimer>
 
-namespace mdread::timing {
+namespace mdw::timing {
 void start();               // call first thing in main()
 void setEnabled(bool on);
 bool enabled();

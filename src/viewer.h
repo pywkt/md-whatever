@@ -6,7 +6,7 @@
 
 #include <QColor>
 
-namespace mdread {
+namespace mdw {
 
 class Viewer : public QLiteHtmlWidget
 {
@@ -34,4 +34,4 @@ private:
     bool m_painted = false;
 };
 
-} // namespace mdread
+} // namespace mdw

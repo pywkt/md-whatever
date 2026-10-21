@@ -1,14 +1,14 @@
-# mdread
+# md-whatever
 
 A fast, read-only Markdown viewer for Linux. Native Qt window, CSS themes,
 math via MathJax, no browser engine, no network access.
 
 ```
-mdread FILE [FILE...]     one window per file (paths or file:// URLs)
-mdread -                  read from stdin
-mdread --theme NAME FILE  use a theme for this run
-mdread --dump-html FILE   print the rendered HTML (waits for math) and exit
-mdread --time FILE        log startup timings to stderr
+md-whatever FILE [FILE...]     one window per file (paths or file:// URLs)
+md-whatever -                  read from stdin
+md-whatever --theme NAME FILE  use a theme for this run
+md-whatever --dump-html FILE   print the rendered HTML (waits for math) and exit
+md-whatever --time FILE        log startup timings to stderr
 ```
 
 ## Install
@@ -22,10 +22,10 @@ On Arch Linux (or anything based on it, like EndeavourOS or Manjaro):
    ./install.sh
    ```
 
-It checks for the packages mdread needs and offers to install any that are
-missing (it asks for your password for that), builds mdread, installs it into
+It checks for the packages md-whatever needs and offers to install any that are
+missing (it asks for your password for that), builds md-whatever, installs it into
 your home folder, and asks whether `.md` files should open with it. Run it
-again to update after getting newer code. To remove mdread, run
+again to update after getting newer code. To remove md-whatever, run
 `./install.sh --uninstall`; that also puts your previous Markdown app back.
 
 Other distributions: install the equivalents of the packages listed in
@@ -43,8 +43,8 @@ access, and only at build time.
 cmake -S . -B build -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/.local
 cmake --build build
 (cd build && ctest)                         # tests
-cmake --install build                       # ~/.local/bin/mdread + data + .desktop
-cmake --build build --target set-default    # make mdread open .md files
+cmake --install build                       # ~/.local/bin/md-whatever + data + .desktop
+cmake --build build --target set-default    # make md-whatever open .md files
 ```
 
 Undo: `cmake --build build --target restore-default` (puts Okular back as the
@@ -74,26 +74,26 @@ web links open in your browser.
 Everything about how documents look is CSS, and files are reloaded live when
 you save them, so you can tweak with the document open.
 
-- **Small tweaks:** `~/.config/mdread/user.css`. It's loaded after the theme.
+- **Small tweaks:** `~/.config/md-whatever/user.css`. It's loaded after the theme.
 - **Pick a theme:** right-click → Theme. That restyles every open window and
-  saves `theme=NAME` in `~/.config/mdread/mdread.conf` (the rest of the file is
-  left as it is). Or edit that line yourself, or use `mdread --theme paper
+  saves `theme=NAME` in `~/.config/md-whatever/md-whatever.conf` (the rest of the file is
+  left as it is). Or edit that line yourself, or use `md-whatever --theme paper
   file.md` for one run. Built in: `default` (follows the system palette and
   fonts) and `paper` (warm serif).
 - **Light or dark:** right-click → Theme → Follow System / Light / Dark (saved
-  as `appearance=` in `mdread.conf`). Every theme has both versions; forcing
+  as `appearance=` in `md-whatever.conf`). Every theme has both versions; forcing
   the opposite of the system mode uses Breeze Light/Dark colors with your
   accent color.
-- **Your own theme:** `~/.config/mdread/themes/NAME.css`. Start from a copy of
+- **Your own theme:** `~/.config/md-whatever/themes/NAME.css`. Start from a copy of
   [`src/themes/default.css`](src/themes/default.css) or one of the examples. A
   user theme named like a built-in one replaces it.
 - **Example themes** in [`examples/themes/`](examples/themes/): `github`,
   `catppuccin` (Latte/Mocha, pink accent), `terminal` (all monospace) and
   `book` (Charter, indented paragraphs). Copy them to
-  `~/.config/mdread/themes/` to use them. Each one names a matching
+  `~/.config/md-whatever/themes/` to use them. Each one names a matching
   `code-theme` at the top. [`examples/user.css.example`](examples/user.css.example)
   has commented tweaks.
-- **Code colors:** `code-theme=Solarized Dark` in `mdread.conf` (any
+- **Code colors:** `code-theme=Solarized Dark` in `md-whatever.conf` (any
   KSyntaxHighlighting theme name, as in Kate). Default: Breeze Light/Dark.
 
 Themes use these variables, filled in from the system palette and fonts.
@@ -142,5 +142,5 @@ For backgrounds, `background: var(--clear)` is transparent.
 `$inline$`, `$$display$$` and ```` ```math ```` blocks are rendered by MathJax 4
 (the same engine GitHub uses) running under the system `node`, started only
 when a document has math. Text appears first; equations fill in a moment later
-and are cached in `~/.cache/mdread/math`, so reopening is instant. Without
+and are cached in `~/.cache/md-whatever/math`, so reopening is instant. Without
 `node` or `mathjax`, the TeX source is shown instead.

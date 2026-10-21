@@ -9,7 +9,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 
-namespace mdread {
+namespace mdw {
 
 static QString readFile(const QString &path)
 {
@@ -21,7 +21,7 @@ static const QStringList kBuiltin = {QStringLiteral("default"), QStringLiteral("
 
 QString Theme::configDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/mdread");
+    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/md-whatever");
 }
 
 bool Theme::isDark(const QPalette &p)
@@ -43,7 +43,7 @@ QStringList Theme::available()
 
 void Theme::load(const QString &cliTheme)
 {
-    QSettings conf(configDir() + QStringLiteral("/mdread.conf"), QSettings::IniFormat);
+    QSettings conf(configDir() + QStringLiteral("/md-whatever.conf"), QSettings::IniFormat);
     m_name = cliTheme.isEmpty() ? conf.value(QStringLiteral("theme"), QStringLiteral("default")).toString() : cliTheme;
     m_codeTheme = conf.value(QStringLiteral("code-theme")).toString();
     const QString appearance = conf.value(QStringLiteral("appearance")).toString().trimmed().toLower();
@@ -113,7 +113,7 @@ bool Theme::saveSetting(const QString &key, const QString &value)
     // the user's comments and ordering. Top-level keys and [General] are the
     // same section to QSettings, so a KEY= line anywhere before another
     // section header is the one that counts.
-    const QString path = configDir() + QStringLiteral("/mdread.conf");
+    const QString path = configDir() + QStringLiteral("/md-whatever.conf");
     QStringList lines;
     QFile in(path);
     if (in.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -153,7 +153,7 @@ bool Theme::saveSetting(const QString &key, const QString &value)
 
 QStringList Theme::watchedFiles() const
 {
-    QStringList files{configDir() + QStringLiteral("/user.css"), configDir() + QStringLiteral("/mdread.conf")};
+    QStringList files{configDir() + QStringLiteral("/user.css"), configDir() + QStringLiteral("/md-whatever.conf")};
     if (!m_themePath.isEmpty())
         files << m_themePath;
     return files;
@@ -249,4 +249,4 @@ QColor Theme::textColor(const QPalette &p, bool dark) const
     return c;
 }
 
-} // namespace mdread
+} // namespace mdw

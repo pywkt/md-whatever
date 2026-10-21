@@ -552,7 +552,7 @@ void DocumentContainerPrivate::delete_font(litehtml::uint_ptr hFont)
 
 litehtml::pixel_t DocumentContainerPrivate::text_width(const char *text, litehtml::uint_ptr hFont)
 {
-    // mdread patch: fractional widths. Integer widths round every word up,
+    // md-whatever patch: fractional widths. Integer widths round every word up,
     // which adds visible jitter between words and at <wbr> break points.
     const QFontMetricsF fm(toQFont(hFont));
     return litehtml::pixel_t(fm.horizontalAdvance(QString::fromUtf8(text)));
@@ -568,7 +568,7 @@ void DocumentContainerPrivate::draw_text(litehtml::uint_ptr hdc,
     const QFont font = toQFont(hFont);
     painter->setFont(font);
     painter->setPen(toQColor(color));
-    // mdread patch: draw on the primary font's baseline without clipping.
+    // md-whatever patch: draw on the primary font's baseline without clipping.
     // Drawing into the box top-aligned lets fallback glyphs (math symbols,
     // emoji) with taller metrics push the line down and clip descenders.
     painter->drawText(QPointF(pos.x, pos.y + QFontMetricsF(font).ascent()), QString::fromUtf8(text));
@@ -635,7 +635,7 @@ void DocumentContainerPrivate::load_image(const char *src, const char *baseurl, 
         return;
 
     const QByteArray data = m_dataCallback(url);
-    // mdread patch: read only the size now; decode when first drawn.
+    // md-whatever patch: read only the size now; decode when first drawn.
     QBuffer buffer;
     buffer.setData(data);
     buffer.open(QIODevice::ReadOnly);

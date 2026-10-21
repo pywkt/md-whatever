@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Markdown Reader
+Name=md-whatever
 GenericName=Markdown Viewer
 Comment=Read Markdown files
-Exec=@MDREAD_EXEC@ %F
+Exec=@MDW_EXEC@ %F
 Icon=text-markdown
 Terminal=false
 MimeType=text/markdown;text/x-markdown;

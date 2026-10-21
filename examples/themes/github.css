@@ -1,5 +1,5 @@
 /* github: close to how GitHub renders READMEs, in light and dark.
-   Matching code colors: code-theme=GitHub Light (or GitHub Dark) in mdread.conf.
+   Matching code colors: code-theme=GitHub Light (or GitHub Dark) in md-whatever.conf.
    Weights are 700 because Noto Sans has no 600 face (600 falls back to Medium). */
 
 :root {

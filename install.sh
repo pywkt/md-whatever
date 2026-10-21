@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# mdread installer: installs what's needed to build, builds, installs into
+# md-whatever installer: installs what's needed to build, builds, installs into
 # your home folder (no root needed for that part), and offers to make
-# mdread the default app for Markdown files.
+# md-whatever the default app for Markdown files.
 #
 #   ./install.sh               install or update
 #   ./install.sh --uninstall   remove it again (your settings are kept)
@@ -23,8 +23,8 @@ while [ $# -gt 0 ]; do
 done
 
 BUILD_DIR=build
-DATA_DIR="$PREFIX/share/mdread"
-DESKTOP_FILE="$PREFIX/share/applications/mdread.desktop"
+DATA_DIR="$PREFIX/share/md-whatever"
+DESKTOP_FILE="$PREFIX/share/applications/md-whatever.desktop"
 PREVIOUS_DEFAULT_FILE="$DATA_DIR/previous-default"
 MIME_TYPES=(text/markdown text/x-markdown)
 
@@ -57,34 +57,34 @@ refresh_desktop_caches() {
 
 # --------------------------------------------------------------------------
 uninstall() {
-  bold "Removing mdread from $PREFIX"
-  if [ "$(current_default)" = mdread.desktop ]; then
+  bold "Removing md-whatever from $PREFIX"
+  if [ "$(current_default)" = md-whatever.desktop ]; then
     local previous=""
     [ -f "$PREVIOUS_DEFAULT_FILE" ] && previous="$(cat "$PREVIOUS_DEFAULT_FILE")"
-    if [ -n "$previous" ] && [ "$previous" != mdread.desktop ]; then
+    if [ -n "$previous" ] && [ "$previous" != md-whatever.desktop ]; then
       for t in "${MIME_TYPES[@]}"; do xdg-mime default "$previous" "$t"; done
       info "Markdown files open with $previous again."
     else
-      info "mdread was your default for Markdown files; your system will pick another app."
+      info "md-whatever was your default for Markdown files; your system will pick another app."
     fi
   fi
-  rm -f "$PREFIX/bin/mdread" "$DESKTOP_FILE"
+  rm -f "$PREFIX/bin/md-whatever" "$DESKTOP_FILE"
   rm -rf "$DATA_DIR"
   refresh_desktop_caches
-  info "Done. Your settings (~/.config/mdread) and math cache (~/.cache/mdread) were kept;"
+  info "Done. Your settings (~/.config/md-whatever) and math cache (~/.cache/md-whatever) were kept;"
   info "delete those folders too if you want everything gone."
 }
 
 # --------------------------------------------------------------------------
 install_packages() {
-  bold "1/4  Checking what's needed to build mdread"
+  bold "1/4  Checking what's needed to build md-whatever"
   if command -v pacman >/dev/null; then
     local missing=() math_missing=()
     # pacman -T prints the packages that aren't installed (base-devel is a group-like meta package)
     mapfile -t missing < <(pacman -T "${BUILD_PKGS[@]}" || true)
     mapfile -t math_missing < <(pacman -T "${MATH_PKGS[@]}" || true)
     if [ ${#math_missing[@]} -gt 0 ]; then
-      info "For math equations mdread also uses: ${math_missing[*]}"
+      info "For math equations md-whatever also uses: ${math_missing[*]}"
       if ask "Install those too?" y; then missing+=("${math_missing[@]}"); else
         info "OK — equations will be shown as TeX source. You can install them later."
       fi
@@ -101,7 +101,7 @@ install_packages() {
     info "This script installs packages automatically only on Arch Linux."
     info "On other systems, install the equivalents of these Arch packages first:"
     info "  ${BUILD_PKGS[*]}  (and ${MATH_PKGS[*]} for math)"
-    info "mdread needs Qt 6.5 or newer, litehtml 0.10 and KDE Frameworks 6."
+    info "md-whatever needs Qt 6.5 or newer, litehtml 0.10 and KDE Frameworks 6."
     ask "Are they installed? Continue?" n || exit 1
   fi
 }
@@ -113,15 +113,15 @@ build_and_install() {
   if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then generator=(); fi # keep whatever the build folder already uses
   cmake -S . -B "$BUILD_DIR" "${generator[@]}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" >/dev/null \
     || die "Setting up the build failed (see the messages above). Usually a missing package."
-  cmake --build "$BUILD_DIR" --target mdread || die "Building failed (see the messages above)."
+  cmake --build "$BUILD_DIR" --target md-whatever || die "Building failed (see the messages above)."
 
   bold "3/4  Installing into $PREFIX"
   cmake --install "$BUILD_DIR" >/dev/null || die "Installing failed (see the messages above)."
   refresh_desktop_caches
-  info "Installed $PREFIX/bin/mdread"
+  info "Installed $PREFIX/bin/md-whatever"
   case ":$PATH:" in
     *":$PREFIX/bin:"*) ;;
-    *) info "Note: $PREFIX/bin isn't on your PATH, so typing 'mdread' in a terminal won't"
+    *) info "Note: $PREFIX/bin isn't on your PATH, so typing 'md-whatever' in a terminal won't"
        info "work yet (opening files from your file manager will). To fix that, add this"
        info "line to ~/.bashrc (or your shell's startup file) and open a new terminal:"
        info "  export PATH=\"$PREFIX/bin:\$PATH\"" ;;
@@ -135,23 +135,23 @@ offer_default() {
   case ":${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}:" in
     *":$PREFIX/share:"*|*":$PREFIX/share/:"*) ;;
     *) info "$PREFIX/share isn't one of the folders your desktop looks in for apps,"
-       info "so mdread won't appear in menus or as a default app. Skipping this step."
+       info "so md-whatever won't appear in menus or as a default app. Skipping this step."
        return ;;
   esac
   local current
   current="$(current_default)"
-  if [ "$current" = mdread.desktop ]; then
-    info "mdread already opens .md files."
+  if [ "$current" = md-whatever.desktop ]; then
+    info "md-whatever already opens .md files."
     return
   fi
   info "Right now .md files open with: ${current:-nothing set}"
-  if ask "Open .md files with mdread from now on?" y; then
+  if ask "Open .md files with md-whatever from now on?" y; then
     [ -n "$current" ] && printf '%s\n' "$current" > "$PREVIOUS_DEFAULT_FILE"
-    for t in "${MIME_TYPES[@]}"; do xdg-mime default mdread.desktop "$t"; done
+    for t in "${MIME_TYPES[@]}"; do xdg-mime default md-whatever.desktop "$t"; done
     refresh_desktop_caches
     info "Done. './install.sh --uninstall' puts ${current:-the old setting} back."
   else
-    info "Left as it is. You can still right-click a file → Open With → mdread."
+    info "Left as it is. You can still right-click a file → Open With → md-whatever."
   fi
 }
 
@@ -166,5 +166,5 @@ install_packages
 build_and_install
 offer_default
 bold "All set."
-info "Open a Markdown file from your file manager, or run: mdread FILE.md"
+info "Open a Markdown file from your file manager, or run: md-whatever FILE.md"
 info "Right-click a document for themes and light/dark. Update later by running this script again."

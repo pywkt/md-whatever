@@ -12,14 +12,14 @@
 #include <QStandardPaths>
 #include <QTimer>
 
-namespace mdread {
+namespace mdw {
 
 static QString dataDir()
 {
-    const QByteArray env = qgetenv("MDREAD_DATA_DIR");
+    const QByteArray env = qgetenv("MDW_DATA_DIR");
     if (!env.isEmpty())
         return QString::fromLocal8Bit(env);
-    return QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../share/mdread"));
+    return QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../share/md-whatever"));
 }
 
 MathRenderer &MathRenderer::instance()
@@ -30,7 +30,7 @@ MathRenderer &MathRenderer::instance()
 
 MathRenderer::MathRenderer()
 {
-    m_cacheDir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/mdread/math");
+    m_cacheDir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/md-whatever/math");
 }
 
 QString MathRenderer::keyFor(const QString &tex, bool display)
@@ -249,4 +249,4 @@ QByteArray MathRenderer::svgForDisplay(const QString &key, const QColor &color, 
     return h.toUtf8() + svg.mid(tagEnd);
 }
 
-} // namespace mdread
+} // namespace mdw

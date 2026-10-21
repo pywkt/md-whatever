@@ -1,6 +1,6 @@
 /* default: follows the system palette (Breeze light/dark, accent color)
    and system fonts. Every color here is a var() set from the palette.
-   Copy this file to ~/.config/mdread/themes/<name>.css to make your own. */
+   Copy this file to ~/.config/md-whatever/themes/<name>.css to make your own. */
 
 h1, h2, h3, h4, h5, h6 { font-weight: 600; color: var(--text); }
 h1 {

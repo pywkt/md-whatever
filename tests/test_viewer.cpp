@@ -16,9 +16,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-using namespace mdread;
+using namespace mdw;
 
-static const QString kFixtures = QStringLiteral(MDREAD_FIXTURES);
+static const QString kFixtures = QStringLiteral(MDW_FIXTURES);
 
 static void writeAtomically(const QString &path, const QByteArray &data)
 {
@@ -59,7 +59,7 @@ private slots:
         Q_INIT_RESOURCE(resources);
         QStandardPaths::setTestModeEnabled(true); // config + cache under ~/.qttest
         const QString config = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-        QDir(config + QStringLiteral("/mdread")).removeRecursively();
+        QDir(config + QStringLiteral("/md-whatever")).removeRecursively();
         QDir().mkpath(config); // like ~/.config, which always exists
         ctx = new AppContext(QString());
     }
@@ -67,7 +67,7 @@ private slots:
     void opensAndTitles()
     {
         MainWindow *w = open(kFixtures + QStringLiteral("/kitchen-sink.md"));
-        QCOMPARE(w->windowTitle(), QStringLiteral("kitchen-sink.md — mdread"));
+        QCOMPARE(w->windowTitle(), QStringLiteral("kitchen-sink.md — md-whatever"));
         QVERIFY(w->currentHtml().contains(QLatin1String("<h1 id=\"kitchen-sink\">")));
         QVERIFY(!w->currentHtml().contains(QLatin1String("title: Kitchen sink"))); // front matter hidden
         delete w;
@@ -114,12 +114,12 @@ private slots:
         MainWindow *w = open(kFixtures + QStringLiteral("/kitchen-sink.md"));
         Viewer *v = viewer(w);
         emit v->linkClicked(QUrl(QStringLiteral("readme.md"))); // relative, as litehtml reports it
-        QTRY_COMPARE(w->windowTitle(), QStringLiteral("readme.md — mdread"));
+        QTRY_COMPARE(w->windowTitle(), QStringLiteral("readme.md — md-whatever"));
         QTest::keyClick(w, Qt::Key_Left, Qt::AltModifier);
-        QTRY_COMPARE(w->windowTitle(), QStringLiteral("kitchen-sink.md — mdread"));
+        QTRY_COMPARE(w->windowTitle(), QStringLiteral("kitchen-sink.md — md-whatever"));
         // link with an anchor into another file
         emit v->linkClicked(QUrl(QStringLiteral("math.md#display-math")));
-        QTRY_COMPARE(w->windowTitle(), QStringLiteral("math.md — mdread"));
+        QTRY_COMPARE(w->windowTitle(), QStringLiteral("math.md — md-whatever"));
         QTRY_VERIFY(v->scrollY() > 0);
         delete w;
     }
@@ -196,7 +196,7 @@ private slots:
     void userCssRestylesLive()
     {
         MainWindow *w = open(kFixtures + QStringLiteral("/kitchen-sink.md"));
-        const QString conf = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/mdread");
+        const QString conf = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/md-whatever");
         QVERIFY(!QFileInfo::exists(conf)); // the config dir appears while the app runs
         QDir().mkpath(conf);
         QTest::qWait(300); // let the watcher pick up the new directory
@@ -213,7 +213,7 @@ private slots:
         if (!MathRenderer::instance().available())
             QSKIP("math helper unavailable");
         MainWindow *w = open(kFixtures + QStringLiteral("/math.md"));
-        QTRY_VERIFY_WITH_TIMEOUT(w->currentHtml().contains(QLatin1String("mdread-math:")), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(w->currentHtml().contains(QLatin1String("mdw-math:")), 10000);
         QTRY_VERIFY_WITH_TIMEOUT(!w->mathPending(), 10000);
         QVERIFY(w->currentHtml().contains(QLatin1String("class=\"math-error\""))); // the broken \frac
         QVERIFY(!w->currentHtml().contains(QLatin1String("class=\"math-pending\"")));
@@ -256,7 +256,7 @@ private slots:
 
     void themeMenuSwitchesAndRemembers()
     {
-        const QString conf = Theme::configDir() + QStringLiteral("/mdread.conf");
+        const QString conf = Theme::configDir() + QStringLiteral("/md-whatever.conf");
         QDir().mkpath(Theme::configDir());
         writeAtomically(conf, "# my settings\ncode-theme=Nord\n");
         QTest::qWait(250); // let the conf watcher settle
@@ -297,7 +297,7 @@ private slots:
 
     void forcedLightAndDark()
     {
-        const QString conf = Theme::configDir() + QStringLiteral("/mdread.conf");
+        const QString conf = Theme::configDir() + QStringLiteral("/md-whatever.conf");
         const QPalette original = QApplication::palette();
         QPalette dark;
         dark.setColor(QPalette::Base, QColor(0x20, 0x20, 0x24));
@@ -343,8 +343,8 @@ private slots:
     void cleanupTestCase()
     {
         delete ctx;
-        QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/mdread")).removeRecursively();
-        QDir(QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/mdread")).removeRecursively();
+        QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/md-whatever")).removeRecursively();
+        QDir(QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/md-whatever")).removeRecursively();
     }
 };
 

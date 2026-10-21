@@ -9,7 +9,7 @@
 
 namespace KSyntaxHighlighting { class Repository; }
 
-namespace mdread {
+namespace mdw {
 
 class Highlighter
 {
@@ -30,4 +30,4 @@ private:
     bool m_dark = false;
 };
 
-} // namespace mdread
+} // namespace mdw
