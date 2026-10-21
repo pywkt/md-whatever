@@ -11,10 +11,31 @@ mdread --dump-html FILE   print the rendered HTML (waits for math) and exit
 mdread --time FILE        log startup timings to stderr
 ```
 
-## Build and install
+## Install
 
-Needs (Arch): `qt6-base qt6-svg qt6-tools litehtml md4c syntax-highlighting
-mathjax nodejs cmake ninja`. The first configure downloads the MathJax font
+On Arch Linux (or anything based on it, like EndeavourOS or Manjaro):
+
+1. Get the code: download it as a ZIP and unpack it, or `git clone` it.
+2. Open a terminal in that folder and run:
+
+   ```bash
+   ./install.sh
+   ```
+
+It checks for the packages mdread needs and offers to install any that are
+missing (it asks for your password for that), builds mdread, installs it into
+your home folder, and asks whether `.md` files should open with it. Run it
+again to update after getting newer code. To remove mdread, run
+`./install.sh --uninstall`; that also puts your previous Markdown app back.
+
+Other distributions: install the equivalents of the packages listed in
+`install.sh` first (Qt 6.5+, litehtml 0.10, KDE Frameworks 6
+syntax-highlighting, md4c, CMake), then run the same script.
+
+## Building by hand
+
+Needs (Arch): `qt6-base qt6-svg litehtml md4c syntax-highlighting cmake ninja`,
+plus `nodejs mathjax` for math. The first configure downloads the MathJax font
 data (`@mathjax/mathjax-newcm-font` 4.1.3, hash-checked) — the only network
 access, and only at build time.
 
@@ -26,8 +47,8 @@ cmake --install build                       # ~/.local/bin/mdread + data + .desk
 cmake --build build --target set-default    # make mdread open .md files
 ```
 
-Undo: `cmake --build build --target restore-default` (Okular back as default),
-`cmake --build build --target uninstall`.
+Undo: `cmake --build build --target restore-default` (puts Okular back as the
+default), `cmake --build build --target uninstall`.
 
 ## Keys
 
