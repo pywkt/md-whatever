@@ -294,7 +294,7 @@ Useful selectors: `.markdown-body` (the text column), `pre.code`, `code`,
 `max-width`, `:nth-child`, `::before` / `::after` content, `text-indent`. Not
 supported: flexbox/grid, `text-transform`, `letter-spacing`, small caps,
 shadows, `vertical-align` lengths, `word-break`. Use `em` rather than `ch` for
-widths. Full findings are in [`NOTES.md`](NOTES.md).
+widths.
 
 **One quirk to know:** a value that uses `var()` beats any plain value, whatever
 the selector or order. So if a theme sets `border-bottom: 1px solid var(--rule)`,
@@ -338,8 +338,17 @@ Layout: `src/markdown.cpp` turns Markdown into HTML (plain C++, no Qt),
 helper (`data/mathjax-helper.cjs`), `src/theme.cpp` handles themes and
 settings, and `src/mainwindow.cpp` is the window. `third_party/qlitehtml` is a
 vendored copy of the Qt widget for litehtml, with a few local fixes listed in
-its `UPSTREAM_COMMIT`. [`NOTES.md`](NOTES.md) has design notes, performance
-numbers and developer aids (like `MDW_SCREENSHOT=out.png` for screenshots).
+its `UPSTREAM_COMMIT`.
+
+Developer aids (environment variables):
+
+- `MDW_SCREENSHOT=out.png`: save a screenshot once text and math have rendered,
+  then quit. `MDW_SCREENSHOT_SCROLL=0.5` scrolls halfway first. Works headless
+  with `QT_QPA_PLATFORM=offscreen`.
+- `MDW_QUIT_AFTER_PAINT=1`: quit after the first paint (pair with `--time`).
+- `MDW_DATA_DIR`: where to find `mathjax-helper.cjs` and the math fonts.
+- `QT_FORCE_STDERR_LOGGING=1`: print Qt warnings to the terminal instead of the
+  system journal.
 
 ---
 
@@ -353,3 +362,15 @@ md-whatever is mostly glue. The hard parts are other people's work:
 colors the code, [MathJax](https://www.mathjax.org/) and the New Computer
 Modern fonts typeset the math, and [Qt](https://www.qt.io/) does everything
 else.
+
+## License
+
+md-whatever's own code is MIT (see [`LICENSE`](LICENSE)). Do whatever.
+
+One catch: the Qt widget in [`third_party/qlitehtml`](third_party/qlitehtml)
+is someone else's code under GPL-3.0 (with the Qt exception; license texts in
+its `LICENSES` folder). Since it's compiled in, a built md-whatever is covered
+by GPL-3.0 as a whole. In practice: use it and change it freely; if you hand
+out a built copy, the GPL's "share the source" terms apply. The other libraries
+are permissive: litehtml (BSD-3-Clause), md4c (MIT), KSyntaxHighlighting
+(MIT), MathJax and its fonts (Apache-2.0).

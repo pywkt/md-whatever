@@ -2,3 +2,9 @@
 /spikes/*/build/
 /spikes/*/out/
 compile_commands.json
+
+# Local-only: planning notes, early experiments, history backups
+/NOTES.md
+/draft_plan*.md
+/spikes/
+*.bundle
