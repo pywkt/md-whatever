@@ -1,7 +1,6 @@
 /build/
-/spikes/*/build/
-/spikes/*/out/
 compile_commands.json
+/.cache/
 
 # Local-only: planning notes, early experiments, history backups
 /NOTES.md
