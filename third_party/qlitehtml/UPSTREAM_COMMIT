@@ -1,0 +1,13 @@
+180e3ebb22bb8d82a9bfe88bba46da8c28c9f2a2 Tue Oct 13 13:35:41 2026 +0000
+Source: https://code.qt.io/playground/qlitehtml.git (src/ only; litehtml comes from the system package)
+
+Local patches:
+- container_qpainter.cpp draw_text(): draw at the font baseline instead of into a
+  top-aligned clipping rect, so words containing fallback-font glyphs keep their
+  baseline and descenders aren't clipped.
+- container_qpainter.cpp text_width(): use QFontMetricsF (fractional widths)
+  instead of integer QFontMetrics, so word spacing doesn't drift.
+- qlitehtmlwidget.cpp render(): skip the litehtml relayout when the layout
+  width hasn't changed (showing the window or a height-only resize).
+- container_qpainter.cpp/_p.h: decode images lazily on first draw; layout uses
+  the size from the image header (QImageReader::size()).
