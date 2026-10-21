@@ -57,10 +57,18 @@ void AppContext::reload()
 
 void AppContext::setTheme(const QString &name)
 {
-    if (!Theme::saveChoice(name))
+    if (!Theme::saveSetting(QStringLiteral("theme"), name))
         qWarning("mdread: could not write %s/mdread.conf", qPrintable(Theme::configDir()));
     m_cliTheme.clear(); // the menu choice wins over --theme from now on
     m_debounce.stop();  // the conf change would trigger the same reload
+    reload();
+}
+
+void AppContext::setAppearance(Theme::Appearance a)
+{
+    if (!Theme::saveSetting(QStringLiteral("appearance"), Theme::appearanceName(a)))
+        qWarning("mdread: could not write %s/mdread.conf", qPrintable(Theme::configDir()));
+    m_debounce.stop();
     reload();
 }
 
@@ -245,7 +253,14 @@ void MainWindow::readSource()
 void MainWindow::rebuild(bool keepScroll)
 {
     const double ratio = m_viewer->scrollRatio();
-    const QPalette pal = m_viewer->palette();
+    // The window's palette follows the system; the viewer gets the forced
+    // light/dark one (if any) so its scrollbars match the page.
+    const QPalette pal = m_ctx.theme.effectivePalette(palette());
+    const bool forced = m_ctx.theme.appearance() != Theme::Appearance::System;
+    if (forced)
+        m_viewer->setPalette(pal);
+    else if (m_viewer->testAttribute(Qt::WA_SetPalette))
+        m_viewer->setPalette(QPalette()); // back to inheriting the system palette
     const bool dark = Theme::isDark(pal);
     m_ctx.highlighter.setTheme(m_ctx.theme.codeTheme(), dark);
     m_viewer->setMathColor(m_ctx.theme.textColor(pal, dark));
@@ -448,6 +463,22 @@ QMenu *MainWindow::createContextMenu()
         // Queued: the menu (and this action) may be gone by the time windows restyle.
         connect(a, &QAction::triggered, &m_ctx, [ctx = &m_ctx, name] {
             QTimer::singleShot(0, ctx, [ctx, name] { ctx->setTheme(name); });
+        });
+    }
+    themes->addSeparator();
+    auto *modes = new QActionGroup(themes);
+    const std::pair<Theme::Appearance, QString> appearances[] = {
+        {Theme::Appearance::System, tr("Follow System")},
+        {Theme::Appearance::Light, tr("Light")},
+        {Theme::Appearance::Dark, tr("Dark")},
+    };
+    for (const auto &[mode, label] : appearances) {
+        QAction *a = themes->addAction(label);
+        a->setCheckable(true);
+        a->setChecked(mode == m_ctx.theme.appearance());
+        a->setActionGroup(modes);
+        connect(a, &QAction::triggered, &m_ctx, [ctx = &m_ctx, mode] {
+            QTimer::singleShot(0, ctx, [ctx, mode] { ctx->setAppearance(mode); });
         });
     }
     themes->addSeparator();

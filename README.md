@@ -59,6 +59,10 @@ you save them, so you can tweak with the document open.
   left as it is). Or edit that line yourself, or use `mdread --theme paper
   file.md` for one run. Built in: `default` (follows the system palette and
   fonts) and `paper` (warm serif).
+- **Light or dark:** right-click → Theme → Follow System / Light / Dark (saved
+  as `appearance=` in `mdread.conf`). Every theme has both versions; forcing
+  the opposite of the system mode uses Breeze Light/Dark colors with your
+  accent color.
 - **Your own theme:** `~/.config/mdread/themes/NAME.css`. Start from a copy of
   [`src/themes/default.css`](src/themes/default.css) or one of the examples. A
   user theme named like a built-in one replaces it.

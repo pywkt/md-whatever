@@ -283,6 +283,51 @@ private slots:
         QFile::remove(conf);
     }
 
+    void forcedLightAndDark()
+    {
+        const QString conf = Theme::configDir() + QStringLiteral("/mdread.conf");
+        const QPalette original = QApplication::palette();
+        QPalette dark;
+        dark.setColor(QPalette::Base, QColor(0x20, 0x20, 0x24));
+        dark.setColor(QPalette::Text, QColor(0xee, 0xee, 0xee));
+        dark.setColor(QPalette::Window, QColor(0x20, 0x20, 0x24));
+        dark.setColor(QPalette::Highlight, QColor(0xe8, 0x89, 0xc0));
+        QApplication::setPalette(dark);
+
+        MainWindow *w = open(kFixtures + QStringLiteral("/kitchen-sink.md"));
+        QTRY_VERIFY(w->currentHtml().contains(QLatin1String("<html class=\"dark\">")));
+
+        ctx->setAppearance(Theme::Appearance::Light);
+        QTRY_VERIFY(w->currentHtml().contains(QLatin1String("<html class=\"light\">")));
+        QVERIFY(w->currentHtml().contains(QLatin1String("--bg: #ffffff")));
+        QVERIFY(w->currentHtml().contains(QLatin1String("--accent: #e889c0"))); // system accent kept
+        QCOMPARE(viewer(w)->palette().color(QPalette::Base), QColor(Qt::white)); // scrollbars match
+        QFile f(conf);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QVERIFY(f.readAll().contains("appearance=light\n"));
+        f.close();
+
+        // Forcing the mode the system already has changes nothing.
+        ctx->setAppearance(Theme::Appearance::Dark);
+        QTRY_VERIFY(w->currentHtml().contains(QLatin1String("<html class=\"dark\">")));
+        QVERIFY(w->currentHtml().contains(QLatin1String("--bg: #202024")));
+
+        // Follow System: back to tracking the system palette, live.
+        ctx->setAppearance(Theme::Appearance::System);
+        QPalette light;
+        light.setColor(QPalette::Base, Qt::white);
+        light.setColor(QPalette::Text, Qt::black);
+        QApplication::setPalette(light);
+        QTRY_VERIFY(w->currentHtml().contains(QLatin1String("<html class=\"light\">")));
+        QCOMPARE(viewer(w)->palette().color(QPalette::Base), QColor(Qt::white));
+
+        QApplication::setPalette(original);
+        delete w;
+        QFile::remove(conf);
+        ctx->setAppearance(Theme::Appearance::System);
+        QFile::remove(conf);
+    }
+
     void cleanupTestCase()
     {
         delete ctx;

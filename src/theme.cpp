@@ -46,6 +46,10 @@ void Theme::load(const QString &cliTheme)
     QSettings conf(configDir() + QStringLiteral("/mdread.conf"), QSettings::IniFormat);
     m_name = cliTheme.isEmpty() ? conf.value(QStringLiteral("theme"), QStringLiteral("default")).toString() : cliTheme;
     m_codeTheme = conf.value(QStringLiteral("code-theme")).toString();
+    const QString appearance = conf.value(QStringLiteral("appearance")).toString().trimmed().toLower();
+    m_appearance = appearance == QLatin1String("light") ? Appearance::Light
+                 : appearance == QLatin1String("dark")  ? Appearance::Dark
+                                                        : Appearance::System;
     m_warning.clear();
 
     // A user theme with a built-in's name replaces the built-in.
@@ -68,11 +72,46 @@ void Theme::load(const QString &cliTheme)
     m_userCss = readFile(configDir() + QStringLiteral("/user.css"));
 }
 
-bool Theme::saveChoice(const QString &name)
+QString Theme::appearanceName(Appearance a)
+{
+    switch (a) {
+    case Appearance::Light: return QStringLiteral("light");
+    case Appearance::Dark: return QStringLiteral("dark");
+    case Appearance::System: break;
+    }
+    return QStringLiteral("system");
+}
+
+QPalette Theme::effectivePalette(const QPalette &system) const
+{
+    const bool systemDark = isDark(system);
+    if (m_appearance == Appearance::System || (m_appearance == Appearance::Dark) == systemDark)
+        return system;
+    // Breeze Light / Breeze Dark (Plasma 6) colors.
+    struct Colors { QRgb window, base, alt, text, button, link, visited; };
+    static const Colors light{0xeff0f1, 0xffffff, 0xf7f7f7, 0x232629, 0xfcfcfc, 0x2980b9, 0x9b59b6};
+    static const Colors dark{0x202326, 0x141618, 0x1d1f22, 0xfcfcfc, 0x292c30, 0x1d99f3, 0x9b59b6};
+    const Colors &c = m_appearance == Appearance::Dark ? dark : light;
+    QPalette p = system; // keeps the accent (Highlight) and anything not set here
+    for (QPalette::ColorGroup g : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+        p.setColor(g, QPalette::Window, QColor(c.window));
+        p.setColor(g, QPalette::WindowText, QColor(c.text));
+        p.setColor(g, QPalette::Base, QColor(c.base));
+        p.setColor(g, QPalette::AlternateBase, QColor(c.alt));
+        p.setColor(g, QPalette::Text, QColor(c.text));
+        p.setColor(g, QPalette::Button, QColor(c.button));
+        p.setColor(g, QPalette::ButtonText, QColor(c.text));
+        p.setColor(g, QPalette::Link, QColor(c.link));
+        p.setColor(g, QPalette::LinkVisited, QColor(c.visited));
+    }
+    return p;
+}
+
+bool Theme::saveSetting(const QString &key, const QString &value)
 {
     // Edit the text rather than rewriting it with QSettings, which would drop
     // the user's comments and ordering. Top-level keys and [General] are the
-    // same section to QSettings, so a theme= line anywhere before another
+    // same section to QSettings, so a KEY= line anywhere before another
     // section header is the one that counts.
     const QString path = configDir() + QStringLiteral("/mdread.conf");
     QStringList lines;
@@ -83,8 +122,8 @@ bool Theme::saveChoice(const QString &name)
     if (!lines.isEmpty() && lines.last().isEmpty())
         lines.removeLast();
 
-    static const QRegularExpression themeLine(QStringLiteral(R"(^\s*theme\s*=)"));
-    const QString newLine = QStringLiteral("theme=") + name;
+    const QRegularExpression keyLine(QStringLiteral(R"(^\s*%1\s*=)").arg(QRegularExpression::escape(key)));
+    const QString newLine = key + QLatin1Char('=') + value;
     int insertAt = 0;
     bool done = false;
     for (int i = 0; i < lines.size() && !done; ++i) {
@@ -96,7 +135,7 @@ bool Theme::saveChoice(const QString &name)
             }
             break; // another section: keys after this aren't ours
         }
-        if (themeLine.match(lines[i]).hasMatch()) {
+        if (keyLine.match(lines[i]).hasMatch()) {
             lines[i] = newLine;
             done = true;
         }

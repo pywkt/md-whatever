@@ -30,6 +30,8 @@ public:
     // Switch every window to a theme and remember it in mdread.conf
     // (this also drops a --theme given on the command line).
     void setTheme(const QString &name);
+    // Light / dark / follow the system, for every window; saved in mdread.conf.
+    void setAppearance(Theme::Appearance a);
 
 signals:
     void themeChanged();
