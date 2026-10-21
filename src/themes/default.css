@@ -39,7 +39,7 @@ pre {
   font-size: 0.875em;
   line-height: 1.5;
 }
-pre code { background: transparent; padding: 0; border-radius: 0; font-size: 1em; }
+pre code { background: var(--clear); padding: 0; border-radius: 0; font-size: 1em; }
 
 blockquote {
   margin-left: 0;
@@ -58,10 +58,10 @@ th, td { padding: 0.4em 0.8em; border-bottom: 1px solid var(--rule); }
 td + td, th + th { border-left: 1px solid var(--rule); }
 th { background: var(--table-head); font-weight: 600; }
 tbody tr:nth-child(even) td { background: var(--table-stripe); }
-tbody tr:last-child td { border-bottom: 0; }
+tbody tr:last-child td { border-bottom: 0 solid var(--rule); }
 
 img { border-radius: 4px; }
 
 .footnotes { color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1em; }
 
-code.math-pending, code.math-source, code.math-error { background-color: transparent; padding: 0; }
+code.math-pending, code.math-source, code.math-error { background: var(--clear); padding: 0; }

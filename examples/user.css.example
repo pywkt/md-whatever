@@ -1,0 +1,28 @@
+/* user.css: small tweaks on top of whichever theme is active.
+   To use: copy this file to ~/.config/mdread/user.css and uncomment what you
+   want. It reloads live when you save it, so keep a document open.
+   The variables are listed in the README ("Themes"). */
+
+/* A proportional font with a real bold face for reading
+   (the system font here, Dank Mono, has no bold). */
+/* :root { --body-font: "Noto Sans"; } */
+
+/* Bigger text. */
+/* :root { --base-size: 18px; } */
+
+/* A wider text column. */
+/* .markdown-body { max-width: 56em; } */
+
+/* Darker background in dark mode only. */
+/* html.dark { --bg: #141418; } */
+
+/* Your own link and accent colors. */
+/* :root { --link: #e889c0; --accent: #e889c0; } */
+
+/* No underline under h1/h2 (default theme). Note: to undo something a
+   theme set with var(), use var() too — litehtml ignores plain overrides
+   of var() values. var(--clear) is transparent. */
+/* h1, h2 { border-bottom: 0 solid var(--rule); } */
+
+/* Headings in the accent color. */
+/* h1, h2, h3 { color: var(--accent); } */

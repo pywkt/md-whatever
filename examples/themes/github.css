@@ -1,0 +1,70 @@
+/* github: close to how GitHub renders READMEs, in light and dark.
+   Matching code colors: code-theme=GitHub Light (or GitHub Dark) in mdread.conf.
+   Weights are 700 because Noto Sans has no 600 face (600 falls back to Medium). */
+
+:root {
+  --body-font: "Noto Sans";
+}
+html.light {
+  --bg: #ffffff;
+  --text: #1f2328;
+  --muted: #59636e;
+  --faint: #8c959f;
+  --rule: #d1d9e0;
+  --code-bg: #eff1f3;
+  --pre-bg: #f6f8fa;
+  --table-stripe: #f6f8fa;
+  --link: #0969da;
+  --accent: #0969da;
+  --accent-text: #ffffff;
+}
+html.dark {
+  --bg: #0d1117;
+  --text: #f0f6fc;
+  --muted: #9198a1;
+  --faint: #656c76;
+  --rule: #3d444d;
+  --code-bg: #262c36;
+  --pre-bg: #151b23;
+  --table-stripe: #151b23;
+  --link: #4493f8;
+  --accent: #4493f8;
+  --accent-text: #ffffff;
+}
+
+body { line-height: 1.5; }
+.markdown-body { max-width: 52em; padding: 2.5em 2.8em 5em 2.8em; }
+
+p, ul, ol, blockquote, table, pre { margin: 0 0 1em 0; }
+
+h1, h2, h3, h4, h5, h6 { font-weight: 700; margin: 1.5em 0 1em 0; }
+h1 { font-size: 2em; margin-top: 0.3em; padding-bottom: 0.3em; border-bottom: 1px solid var(--rule); }
+h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--rule); }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+h5 { font-size: 0.875em; }
+h6 { font-size: 0.85em; color: var(--muted); }
+
+strong { font-weight: 700; }
+
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code { font-size: 0.85em; background: var(--code-bg); border-radius: 6px; padding: 0.2em 0.4em; }
+pre { background: var(--pre-bg); border-radius: 6px; padding: 1em; font-size: 0.85em; line-height: 1.45; }
+pre code { background: var(--clear); padding: 0; border-radius: 0; font-size: 1em; }
+
+blockquote { margin-left: 0; margin-right: 0; padding: 0 1em; color: var(--muted); border-left: 0.25em solid var(--rule); }
+
+hr { height: 0.25em; background: var(--rule); margin: 1.5em 0; border-radius: 2px; }
+
+th, td { padding: 0.4em 0.8em; border: 1px solid var(--rule); }
+td + td, th + th { border-left: 0 solid var(--rule); }
+tbody td { border-top: 0 solid var(--rule); }
+thead th { font-weight: 700; }
+tbody tr:nth-child(even) td { background: var(--table-stripe); }
+
+.task.checked { background: var(--accent); border-color: var(--accent); }
+
+.footnotes { color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1em; }
+code.math-pending, code.math-source, code.math-error { background: var(--clear); padding: 0; }

@@ -58,7 +58,7 @@ pre {
   font-size: 0.85em;
   line-height: 1.5;
 }
-pre code { background: transparent; padding: 0; font-size: 1em; }
+pre code { background: var(--clear); padding: 0; font-size: 1em; }
 
 blockquote {
   margin: 1.2em 0;
@@ -75,4 +75,4 @@ th { border-bottom: 1px solid var(--text); font-weight: 600; }
 th, td { padding: 0.4em 0.9em; }
 
 .footnotes { color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1em; }
-code.math-pending, code.math-source, code.math-error { background-color: transparent; padding: 0; }
+code.math-pending, code.math-source, code.math-error { background: var(--clear); padding: 0; }

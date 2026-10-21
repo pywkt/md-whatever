@@ -1,0 +1,96 @@
+/* catppuccin: the Catppuccin palette (catppuccin.com) — Latte when the
+   system is light, Mocha when it's dark — with pink as the accent and each
+   heading level in its own color.
+   Matching code colors: code-theme=Catppuccin Mocha (or Catppuccin Latte). */
+
+:root {
+  --body-font: "Noto Sans";
+}
+html.light {
+  --bg: #eff1f5;          /* base */
+  --text: #4c4f69;        /* text */
+  --muted: #6c6f85;       /* subtext0 */
+  --faint: #9ca0b0;       /* overlay0 */
+  --rule: #ccd0da;        /* surface0 */
+  --code-bg: #e6e9ef;     /* mantle */
+  --code-border: #dce0e8; /* crust */
+  --quote-bg: #e6e9ef;
+  --table-head: #dce0e8;
+  --table-stripe: #e6e9ef;
+  --link: #1e66f5;        /* blue */
+  --accent: #ea76cb;      /* pink */
+  --accent-text: #eff1f5;
+  --error: #d20f39;       /* red */
+  --h1: #ea76cb; --h2: #8839ef; --h3: #1e66f5; --h4: #179299; --h5: #40a02b; --h6: #6c6f85;
+  --inline-code: #d20f39;
+}
+html.dark {
+  --bg: #1e1e2e;
+  --text: #cdd6f4;
+  --muted: #a6adc8;
+  --faint: #6c7086;
+  --rule: #313244;
+  --code-bg: #181825;
+  --code-border: #11111b;
+  --quote-bg: #181825;
+  --table-head: #181825;
+  --table-stripe: #232334;
+  --link: #89b4fa;
+  --accent: #f5c2e7;
+  --accent-text: #1e1e2e;
+  --error: #f38ba8;
+  --h1: #f5c2e7; --h2: #cba6f7; --h3: #89b4fa; --h4: #94e2d5; --h5: #a6e3a1; --h6: #a6adc8;
+  --inline-code: #fab387;
+}
+
+body { line-height: 1.65; }
+
+h1, h2, h3, h4, h5, h6 { font-weight: 700; }
+h1 { font-size: 2.1em; color: var(--h1); margin-top: 0.2em; padding-bottom: 0.25em; border-bottom: 2px solid var(--rule); }
+h2 { font-size: 1.55em; color: var(--h2); }
+h3 { font-size: 1.25em; color: var(--h3); }
+h4 { font-size: 1.08em; color: var(--h4); }
+h5 { font-size: 1em; color: var(--h5); }
+h6 { font-size: 0.95em; color: var(--h6); }
+
+strong { font-weight: 700; }
+em { color: var(--muted); }
+
+a { color: var(--link); text-decoration: none; border-bottom: 1px dashed var(--link); }
+a:hover { border-bottom: 1px solid var(--link); }
+
+code { font-size: 0.875em; color: var(--inline-code); background: var(--code-bg); border-radius: 5px; padding: 0.12em 0.4em; }
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  padding: 0.9em 1.15em;
+  font-size: 0.875em;
+  line-height: 1.5;
+}
+pre code { color: var(--text); background: var(--clear); padding: 0; border-radius: 0; font-size: 1em; }
+
+blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0.55em 1.1em;
+  border-left: 4px solid var(--h2);
+  border-radius: 0 10px 10px 0;
+  background: var(--quote-bg);
+}
+blockquote p { margin: 0.3em 0; }
+
+hr { border-top: 2px dashed var(--rule); margin: 2.4em 0; }
+
+table { border: 1px solid var(--rule); border-radius: 10px; }
+th, td { padding: 0.45em 0.85em; border-bottom: 1px solid var(--rule); }
+td + td, th + th { border-left: 1px solid var(--rule); }
+th { background: var(--table-head); color: var(--h2); font-weight: 700; }
+tbody tr:nth-child(even) td { background: var(--table-stripe); }
+tbody tr:last-child td { border-bottom: 0 solid var(--rule); }
+
+img { border-radius: 8px; }
+
+.footnotes { color: var(--muted); border-top: 2px dashed var(--rule); padding-top: 1em; }
+code.math-pending, code.math-source, code.math-error { background: var(--clear); padding: 0; }
+code.math-error { color: var(--error); }

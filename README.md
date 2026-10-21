@@ -58,8 +58,14 @@ you save them, so you can tweak with the document open.
   `mdread --theme paper file.md`. Built in: `default` (follows the system
   palette and fonts) and `paper` (warm serif).
 - **Your own theme:** `~/.config/mdread/themes/NAME.css`. Start from a copy of
-  [`src/themes/default.css`](src/themes/default.css). A user theme named like a
-  built-in one replaces it.
+  [`src/themes/default.css`](src/themes/default.css) or one of the examples. A
+  user theme named like a built-in one replaces it.
+- **Example themes** in [`examples/themes/`](examples/themes/): `github`,
+  `catppuccin` (Latte/Mocha, pink accent), `terminal` (all monospace) and
+  `book` (Charter, indented paragraphs). Copy them to
+  `~/.config/mdread/themes/` to use them. Each one names a matching
+  `code-theme` at the top. [`examples/user.css.example`](examples/user.css.example)
+  has commented tweaks.
 - **Code colors:** `code-theme=Solarized Dark` in `mdread.conf` (any
   KSyntaxHighlighting theme name, as in Kate). Default: Breeze Light/Dark.
 
@@ -86,7 +92,7 @@ Example `user.css`:
   --base-size: 17px;
 }
 html.dark { --bg: #1b1b1f; }
-h1, h2 { border-bottom: none; }
+h1, h2 { border-bottom: 0 solid var(--rule); }   /* see the var() quirk below */
 .markdown-body { max-width: 52em; }   /* wider text column */
 ```
 
@@ -95,9 +101,14 @@ Useful selectors: `.markdown-body` (the text column), `pre.code`, `code`,
 `.footnotes`, `.math-display`, `img.math`, `.math-error`, `.banner`.
 
 The renderer is [litehtml](https://github.com/litehtml/litehtml): CSS 2.1 plus
-some CSS 3 (`var()`, `border-radius`, `max-width`, `:nth-child`). There's no
-JavaScript, `vertical-align` lengths, `word-break` or flexbox/grid — see
-`NOTES.md`.
+some CSS 3 (`var()`, `border-radius`, `max-width`, `:nth-child`, `::before`
+content). There's no JavaScript, `vertical-align` lengths, `word-break`,
+`text-transform`, `letter-spacing`, shadows or flexbox/grid — see `NOTES.md`.
+
+**One quirk to know:** a value that uses `var()` beats any plain value, whatever
+the selector or order. So if a rule sets `border-bottom: 1px solid var(--rule)`,
+`border-bottom: 0` won't remove it — write `border-bottom: 0 solid var(--rule)`.
+For backgrounds, `background: var(--clear)` is transparent.
 
 ## Math
 

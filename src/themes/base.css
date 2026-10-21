@@ -2,6 +2,11 @@
    so a theme (or user.css) can override any of it. Sizes are in em so zoom
    and --base-size scale everything together. */
 
+/* litehtml applies values that use var() after all plain values, so a plain
+   override of a var() value is ignored. Override with var() too, e.g.
+   background: var(--clear) or border-bottom: 0 solid var(--rule). */
+:root { --clear: transparent; }
+
 article, section { display: block; }
 
 html { background: var(--bg); }
