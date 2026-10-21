@@ -11,6 +11,8 @@
 #include <QTimer>
 #include <QWidget>
 
+class QMenu;
+
 namespace mdread {
 
 class Viewer;
@@ -25,10 +27,15 @@ public:
     Theme theme;
     Highlighter highlighter;
 
+    // Switch every window to a theme and remember it in mdread.conf
+    // (this also drops a --theme given on the command line).
+    void setTheme(const QString &name);
+
 signals:
     void themeChanged();
 
 private:
+    void reload();
     void rewatch();
     QString m_cliTheme;
     QFileSystemWatcher m_watcher;
@@ -48,6 +55,9 @@ public:
     QString currentHtml() const;
     bool mathPending() const { return !m_pendingMath.isEmpty(); }
     void requestPendingMath() { MathRenderer::instance().request(m_pendingMath); }
+
+    // The right-click menu (separate from showing it, for tests).
+    QMenu *createContextMenu();
 
 signals:
     void mathSettled(); // pending math rendered or given up

@@ -4,6 +4,7 @@
 #include "timing.h"
 #include "viewer.h"
 
+#include <QActionGroup>
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
@@ -37,18 +38,30 @@ AppContext::AppContext(const QString &cliTheme)
     theme.load(cliTheme);
     m_debounce.setSingleShot(true);
     m_debounce.setInterval(100);
-    connect(&m_debounce, &QTimer::timeout, this, [this] {
-        const QString before = theme.signature();
-        theme.load(m_cliTheme);
-        rewatch();
-        if (theme.signature() != before) // ~/.config changes a lot; only restyle on real changes
-            emit themeChanged();
-    });
+    connect(&m_debounce, &QTimer::timeout, this, &AppContext::reload);
     // Watch the files and the config dirs, since editors replace files on save
     // and a user.css may be created while the app is open.
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_debounce, qOverload<>(&QTimer::start));
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_debounce, qOverload<>(&QTimer::start));
     QTimer::singleShot(0, this, &AppContext::rewatch); // off the startup path
+}
+
+void AppContext::reload()
+{
+    const QString before = theme.signature();
+    theme.load(m_cliTheme);
+    rewatch();
+    if (theme.signature() != before) // ~/.config changes a lot; only restyle on real changes
+        emit themeChanged();
+}
+
+void AppContext::setTheme(const QString &name)
+{
+    if (!Theme::saveChoice(name))
+        qWarning("mdread: could not write %s/mdread.conf", qPrintable(Theme::configDir()));
+    m_cliTheme.clear(); // the menu choice wins over --theme from now on
+    m_debounce.stop();  // the conf change would trigger the same reload
+    reload();
 }
 
 void AppContext::rewatch()
@@ -411,23 +424,52 @@ void MainWindow::find(bool backward, bool incremental)
     m_findBar->setStatus(found ? (wrapped ? tr("Wrapped around") : QString()) : tr("Not found"), !found);
 }
 
-void MainWindow::showContextMenu(const QPoint &pos, const QUrl &url)
+QMenu *MainWindow::createContextMenu()
 {
-    Q_UNUSED(url);
-    QMenu menu(this);
-    menu.addAction(QIcon::fromTheme(QStringLiteral("view-refresh")), tr("Reload"), QKeySequence(Qt::Key_F5),
-                   this, &MainWindow::onFileChanged)->setEnabled(!m_path.isEmpty());
-    QAction *copy = menu.addAction(QIcon::fromTheme(QStringLiteral("edit-copy")), tr("Copy"), QKeySequence::Copy, this, [this] {
+    auto *menu = new QMenu(this);
+    menu->addAction(QIcon::fromTheme(QStringLiteral("view-refresh")), tr("Reload"), QKeySequence(Qt::Key_F5),
+                    this, &MainWindow::onFileChanged)->setEnabled(!m_path.isEmpty());
+    QAction *copy = menu->addAction(QIcon::fromTheme(QStringLiteral("edit-copy")), tr("Copy"), QKeySequence::Copy, this, [this] {
         QGuiApplication::clipboard()->setText(m_viewer->selectedText());
     });
     copy->setEnabled(!m_viewer->selectedText().isEmpty());
-    menu.addAction(QIcon::fromTheme(QStringLiteral("edit-find")), tr("Find…"), QKeySequence::Find, this,
-                   [this] { m_findBar->activate(); });
-    menu.addSeparator();
-    menu.addAction(QIcon::fromTheme(QStringLiteral("document-open-folder")), tr("Open Containing Folder"), this, [this] {
+    menu->addAction(QIcon::fromTheme(QStringLiteral("edit-find")), tr("Find…"), QKeySequence::Find, this,
+                    [this] { m_findBar->activate(); });
+    menu->addSeparator();
+
+    // Theme submenu: built-ins, then ~/.config/mdread/themes/*.css.
+    QMenu *themes = menu->addMenu(QIcon::fromTheme(QStringLiteral("preferences-desktop-theme")), tr("Theme"));
+    auto *group = new QActionGroup(themes);
+    for (const QString &name : Theme::available()) {
+        QAction *a = themes->addAction(name);
+        a->setCheckable(true);
+        a->setChecked(name == m_ctx.theme.name());
+        a->setActionGroup(group);
+        // Queued: the menu (and this action) may be gone by the time windows restyle.
+        connect(a, &QAction::triggered, &m_ctx, [ctx = &m_ctx, name] {
+            QTimer::singleShot(0, ctx, [ctx, name] { ctx->setTheme(name); });
+        });
+    }
+    themes->addSeparator();
+    themes->addAction(QIcon::fromTheme(QStringLiteral("document-open-folder")), tr("Open Themes Folder"), this, [] {
+        const QString dir = Theme::configDir() + QStringLiteral("/themes");
+        QDir().mkpath(dir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+
+    menu->addSeparator();
+    menu->addAction(QIcon::fromTheme(QStringLiteral("document-open-folder")), tr("Open Containing Folder"), this, [this] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(m_path).absolutePath()));
     })->setEnabled(!m_path.isEmpty());
-    menu.exec(m_viewer->viewport()->mapToGlobal(pos));
+    return menu;
+}
+
+void MainWindow::showContextMenu(const QPoint &pos, const QUrl &url)
+{
+    Q_UNUSED(url);
+    QMenu *menu = createContextMenu();
+    menu->exec(m_viewer->viewport()->mapToGlobal(pos));
+    menu->deleteLater();
 }
 
 void MainWindow::changeEvent(QEvent *e)

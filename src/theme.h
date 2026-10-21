@@ -22,6 +22,9 @@ public:
     // Reads mdread.conf, the theme file and user.css. cliTheme overrides the config.
     void load(const QString &cliTheme = QString());
 
+    // Sets theme=NAME in mdread.conf, keeping the rest of the file as it is.
+    static bool saveChoice(const QString &name);
+
     QString name() const { return m_name; }
     QString codeTheme() const { return m_codeTheme; }
     QString warning() const { return m_warning; } // e.g. unknown theme name

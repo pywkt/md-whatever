@@ -44,7 +44,7 @@ Undo: `cmake --build build --target restore-default` (Okular back as default),
 | `Ctrl+C` | copy selection |
 | `q` / `Ctrl+W` / `Esc` | close (Esc closes the find bar first) |
 
-Right-click for Reload, Copy, Find and Open Containing Folder. Files reload by
+Right-click for Reload, Copy, Find, Theme and Open Containing Folder. Files reload by
 themselves when saved. Links to other `.md` files open in the same window;
 web links open in your browser.
 
@@ -54,9 +54,11 @@ Everything about how documents look is CSS, and files are reloaded live when
 you save them, so you can tweak with the document open.
 
 - **Small tweaks:** `~/.config/mdread/user.css`. It's loaded after the theme.
-- **Pick a theme:** `theme=paper` in `~/.config/mdread/mdread.conf`, or
-  `mdread --theme paper file.md`. Built in: `default` (follows the system
-  palette and fonts) and `paper` (warm serif).
+- **Pick a theme:** right-click → Theme. That restyles every open window and
+  saves `theme=NAME` in `~/.config/mdread/mdread.conf` (the rest of the file is
+  left as it is). Or edit that line yourself, or use `mdread --theme paper
+  file.md` for one run. Built in: `default` (follows the system palette and
+  fonts) and `paper` (warm serif).
 - **Your own theme:** `~/.config/mdread/themes/NAME.css`. Start from a copy of
   [`src/themes/default.css`](src/themes/default.css) or one of the examples. A
   user theme named like a built-in one replaces it.

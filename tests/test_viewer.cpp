@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLineEdit>
+#include <QMenu>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -239,6 +240,47 @@ private slots:
         QTest::keyClick(w, Qt::Key_Equal, Qt::ControlModifier);
         QTest::keyClick(w, Qt::Key_0, Qt::ControlModifier); // back to 100%, and doesn't crash
         delete w;
+    }
+
+    void themeMenuSwitchesAndRemembers()
+    {
+        const QString conf = Theme::configDir() + QStringLiteral("/mdread.conf");
+        QDir().mkpath(Theme::configDir());
+        writeAtomically(conf, "# my settings\ncode-theme=Nord\n");
+        QTest::qWait(250); // let the conf watcher settle
+
+        MainWindow *w = open(kFixtures + QStringLiteral("/kitchen-sink.md"));
+        auto themeAction = [w](const QString &name) -> QAction * {
+            QMenu *menu = w->createContextMenu();
+            menu->deleteLater();
+            for (QAction *a : menu->actions())
+                if (a->menu() && a->text().remove(QLatin1Char('&')) == QLatin1String("Theme"))
+                    for (QAction *t : a->menu()->actions())
+                        if (t->text().remove(QLatin1Char('&')) == name)
+                            return t;
+            return nullptr;
+        };
+
+        QAction *paper = themeAction(QStringLiteral("paper"));
+        QVERIFY(paper);
+        QVERIFY(!paper->isChecked());
+        QVERIFY(themeAction(QStringLiteral("default"))->isChecked());
+        paper->trigger();
+        QTRY_VERIFY(w->currentHtml().contains(QLatin1String("\"Noto Serif\"")));
+        QVERIFY(themeAction(QStringLiteral("paper"))->isChecked());
+
+        auto readConf = [&conf] {
+            QFile f(conf);
+            return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+        };
+        QCOMPARE(readConf(), QStringLiteral("theme=paper\n# my settings\ncode-theme=Nord\n"));
+
+        themeAction(QStringLiteral("default"))->trigger();
+        QTRY_VERIFY(!w->currentHtml().contains(QLatin1String("\"Noto Serif\"")));
+        QCOMPARE(readConf(), QStringLiteral("theme=default\n# my settings\ncode-theme=Nord\n"));
+
+        delete w;
+        QFile::remove(conf);
     }
 
     void cleanupTestCase()

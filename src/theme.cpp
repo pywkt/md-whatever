@@ -68,6 +68,50 @@ void Theme::load(const QString &cliTheme)
     m_userCss = readFile(configDir() + QStringLiteral("/user.css"));
 }
 
+bool Theme::saveChoice(const QString &name)
+{
+    // Edit the text rather than rewriting it with QSettings, which would drop
+    // the user's comments and ordering. Top-level keys and [General] are the
+    // same section to QSettings, so a theme= line anywhere before another
+    // section header is the one that counts.
+    const QString path = configDir() + QStringLiteral("/mdread.conf");
+    QStringList lines;
+    QFile in(path);
+    if (in.open(QIODevice::ReadOnly | QIODevice::Text))
+        lines = QString::fromUtf8(in.readAll()).split(QLatin1Char('\n'));
+    in.close();
+    if (!lines.isEmpty() && lines.last().isEmpty())
+        lines.removeLast();
+
+    static const QRegularExpression themeLine(QStringLiteral(R"(^\s*theme\s*=)"));
+    const QString newLine = QStringLiteral("theme=") + name;
+    int insertAt = 0;
+    bool done = false;
+    for (int i = 0; i < lines.size() && !done; ++i) {
+        const QString t = lines[i].trimmed();
+        if (t.startsWith(QLatin1Char('['))) {
+            if (t.compare(QLatin1String("[General]"), Qt::CaseInsensitive) == 0) {
+                insertAt = i + 1;
+                continue;
+            }
+            break; // another section: keys after this aren't ours
+        }
+        if (themeLine.match(lines[i]).hasMatch()) {
+            lines[i] = newLine;
+            done = true;
+        }
+    }
+    if (!done)
+        lines.insert(insertAt, newLine);
+
+    QDir().mkpath(configDir());
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return false;
+    out.write((lines.join(QLatin1Char('\n')) + QLatin1Char('\n')).toUtf8());
+    return out.flush();
+}
+
 QStringList Theme::watchedFiles() const
 {
     QStringList files{configDir() + QStringLiteral("/user.css"), configDir() + QStringLiteral("/mdread.conf")};
