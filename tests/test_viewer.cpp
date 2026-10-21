@@ -237,8 +237,20 @@ private slots:
     void zoomKeys()
     {
         MainWindow *w = open(kFixtures + QStringLiteral("/kitchen-sink.md"));
+        Viewer *v = viewer(w);
+        QCOMPARE(v->zoomFactor(), 1.0);
         QTest::keyClick(w, Qt::Key_Equal, Qt::ControlModifier);
-        QTest::keyClick(w, Qt::Key_0, Qt::ControlModifier); // back to 100%, and doesn't crash
+        QVERIFY(v->zoomFactor() > 1.05);
+        QTest::keyClick(w, Qt::Key_0, Qt::ControlModifier); // back to 100%
+        QCOMPARE(v->zoomFactor(), 1.0);
+        QTest::keyClick(w, Qt::Key_Plus, Qt::ControlModifier);
+        QVERIFY(v->zoomFactor() > 1.05);
+        QTest::keyClick(w, Qt::Key_Minus, Qt::ControlModifier);
+        QCOMPARE(v->zoomFactor(), 1.0);
+        QTest::keyClick(w, Qt::Key_Minus, Qt::ControlModifier);
+        QVERIFY(v->zoomFactor() < 0.95);
+        QTest::keyClick(w, Qt::Key_0, Qt::ControlModifier);
+        QCOMPARE(v->zoomFactor(), 1.0);
         delete w;
     }
 

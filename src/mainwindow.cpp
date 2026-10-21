@@ -19,6 +19,8 @@
 #include <QTextDocument>
 #include <QVBoxLayout>
 
+#include <memory>
+
 namespace mdread {
 
 static const QStringList kMarkdownSuffixes = {
@@ -158,8 +160,15 @@ MainWindow::MainWindow(AppContext &ctx)
 
 void MainWindow::setupShortcuts()
 {
-    auto add = [this](std::initializer_list<QKeySequence> keys, auto fn) {
+    // Register each key once. Two QShortcuts with the same key are
+    // "ambiguous" and neither fires — e.g. Ctrl+- is also the standard
+    // ZoomOut key, which used to break zooming out.
+    auto used = std::make_shared<QList<QKeySequence>>();
+    auto add = [this, used](std::initializer_list<QKeySequence> keys, auto fn) {
         for (const QKeySequence &k : keys) {
+            if (k.isEmpty() || used->contains(k))
+                continue;
+            used->append(k);
             auto *s = new QShortcut(k, this);
             connect(s, &QShortcut::activated, this, fn);
         }
