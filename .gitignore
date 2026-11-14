@@ -6,4 +6,5 @@ compile_commands.json
 /NOTES.md
 /draft_plan*.md
 /spikes/
+/resources/
 *.bundle

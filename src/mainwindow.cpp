@@ -298,8 +298,11 @@ void MainWindow::rebuild(bool keepScroll)
         if (keepScroll && isVisible())
             QTimer::singleShot(50, this, &MainWindow::maybeScreenshot);
     }
-    else if (isVisible() && keepScroll)
-        MathRenderer::instance().request(m_pendingMath); // reload: already painted once
+    else if (isVisible())
+        // Already on screen (reload, theme change, or a followed link): the
+        // first-paint request has been used up, so ask now. The text still
+        // paints first, since results arrive later on the event loop.
+        MathRenderer::instance().request(m_pendingMath);
 }
 
 void MainWindow::onMathResults()

@@ -10,6 +10,7 @@
 #include <QFileInfo>
 #include <QLineEdit>
 #include <QMenu>
+#include <QRandomGenerator>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -217,6 +218,26 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!w->mathPending(), 10000);
         QVERIFY(w->currentHtml().contains(QLatin1String("class=\"math-error\""))); // the broken \frac
         QVERIFY(!w->currentHtml().contains(QLatin1String("class=\"math-pending\"")));
+        delete w;
+    }
+
+    void mathAfterFollowingLink()
+    {
+        // A followed link opens the new file in a window that has already
+        // painted, so its math must be requested then, not on first paint.
+        if (!MathRenderer::instance().available())
+            QSKIP("math helper unavailable");
+        QTemporaryDir dir;
+        // Unique TeX so a cache left over from an earlier run can't make this pass.
+        const QByteArray tex = "x_{" + QByteArray::number(QRandomGenerator::global()->generate()) + "} + \\sqrt{2}";
+        writeAtomically(dir.filePath(QStringLiteral("a.md")), "# A\n\n[to b](b.md)\n");
+        writeAtomically(dir.filePath(QStringLiteral("b.md")), "# B\n\n$$" + tex + "$$\n");
+        MainWindow *w = open(dir.filePath(QStringLiteral("a.md")));
+        QTRY_VERIFY(!w->mathPending()); // a.md has no math; first paint is done
+        emit viewer(w)->linkClicked(QUrl(QStringLiteral("b.md")));
+        QTRY_COMPARE(w->windowTitle(), QStringLiteral("b.md — md-whatever"));
+        QTRY_VERIFY_WITH_TIMEOUT(!w->mathPending(), 10000);
+        QVERIFY(w->currentHtml().contains(QLatin1String("mdw-math:")));
         delete w;
     }
 
