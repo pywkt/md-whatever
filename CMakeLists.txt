@@ -87,6 +87,9 @@ target_link_libraries(test_viewer PRIVATE mdw_core Qt6::Test)
 add_test(NAME viewer COMMAND test_viewer)
 set_tests_properties(viewer PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# --- web reader (optional; see web/CMakeLists.txt) ------------------------------
+add_subdirectory(web)
+
 # --- install -----------------------------------------------------------------
 install(TARGETS md-whatever RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY ${MDW_DATA_BUILD_DIR}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/md-whatever)

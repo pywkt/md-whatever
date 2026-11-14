@@ -1,4 +1,6 @@
 // Markdown -> HTML body. Pure C++: no Qt includes here or in markdown.cpp.
+// The web reader compiles this file to WebAssembly (web/CMakeLists.txt), so it
+// must stay free of Qt and of anything wasi-libc lacks (threads, files, exceptions).
 #pragma once
 
 #include <functional>

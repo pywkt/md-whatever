@@ -1,0 +1,68 @@
+/* Lives inside the document's shadow root, next to the md-whatever theme.
+   Part A is loaded before the theme (structure a theme may override),
+   part B after it (code colors, which the desktop app writes as inline styles). */
+
+/*--A--*/
+:host { display: block; overflow: auto; background: var(--bg); color-scheme: light; }
+:host(.dark) { color-scheme: dark; }
+.mdw-page { min-height: 100%; }
+.markdown-body { overflow-wrap: break-word; }
+
+/* $$...$$ arrives as a span because browsers will not nest a div in a <p>. */
+.math-display { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+svg.math { display: inline-block; overflow: visible; }
+
+/* Images this page did not load: say so instead of showing nothing. */
+.mdw-img-note {
+  display: inline-block;
+  padding: 0.05em 0.5em;
+  border: 1px dashed var(--faint);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-indent: 0;
+}
+.mdw-note { color: var(--muted); }
+a:not([href]) { color: inherit; text-decoration: none; }
+
+/*--B--*/
+/* Breeze Light / Breeze Dark, the app's default code themes. */
+:host {
+  --hl-keyword: #1f1c1b;
+  --hl-type: #0057ae;
+  --hl-func: #644a9b;
+  --hl-string: #bf0303;
+  --hl-comment: #898887;
+  --hl-number: #b08000;
+  --hl-meta: #006e28;
+  --hl-var: #0057ae;
+  --hl-const: #aa5500;
+  --hl-add: #006e28;
+  --hl-del: #bf0303;
+}
+:host(.dark) {
+  --hl-keyword: #cfcfc2;
+  --hl-type: #2980b9;
+  --hl-func: #8e44ad;
+  --hl-string: #f44f4f;
+  --hl-comment: #7a7c7d;
+  --hl-number: #f67400;
+  --hl-meta: #27ae60;
+  --hl-var: #27aeae;
+  --hl-const: #27aeae;
+  --hl-add: #27ae60;
+  --hl-del: #f44f4f;
+}
+pre.code .hljs-keyword, pre.code .hljs-selector-tag, pre.code .hljs-literal, pre.code .hljs-doctag { color: var(--hl-keyword); font-weight: bold; }
+pre.code .hljs-type, pre.code .hljs-built_in, pre.code .hljs-title.class_, pre.code .hljs-selector-class, pre.code .hljs-selector-id { color: var(--hl-type); }
+pre.code .hljs-title, pre.code .hljs-section, pre.code .hljs-name { color: var(--hl-func); }
+pre.code .hljs-string, pre.code .hljs-regexp, pre.code .hljs-char { color: var(--hl-string); }
+pre.code .hljs-comment, pre.code .hljs-quote { color: var(--hl-comment); }
+pre.code .hljs-number { color: var(--hl-number); }
+pre.code .hljs-meta, pre.code .hljs-meta .hljs-keyword { color: var(--hl-meta); font-weight: normal; }
+pre.code .hljs-variable, pre.code .hljs-template-variable, pre.code .hljs-attr, pre.code .hljs-attribute, pre.code .hljs-property { color: var(--hl-var); }
+pre.code .hljs-symbol, pre.code .hljs-bullet, pre.code .hljs-link { color: var(--hl-const); }
+pre.code .hljs-addition { color: var(--hl-add); }
+pre.code .hljs-deletion { color: var(--hl-del); }
+pre.code .hljs-emphasis { font-style: italic; }
+pre.code .hljs-strong { font-weight: bold; }
