@@ -1,0 +1,104 @@
+# Builds and tests the web reader, publishes it to GitHub Pages
+# (https://pywkt.github.io/md-whatever/) from main, and attaches the
+# single-file page to the GitHub release for each v* tag. The built page is
+# never committed.
+#
+# One-time setup: Settings → Pages → Build and deployment → Source: GitHub Actions.
+name: Web reader
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'src/markdown.*'
+      - 'src/themes/**'
+      - 'examples/themes/**'
+      - 'web/**'
+      - 'tests/web/**'
+      - 'tests/fixtures/**'
+      - 'README.md'
+      - 'CMakeLists.txt'
+      - '.github/workflows/web.yml'
+  pull_request:
+    paths:
+      - 'src/markdown.*'
+      - 'src/themes/**'
+      - 'examples/themes/**'
+      - 'web/**'
+      - 'tests/web/**'
+      - 'tests/fixtures/**'
+      - 'README.md'
+      - 'CMakeLists.txt'
+      - '.github/workflows/web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # The same distribution and packages as local builds (see web/CMakeLists.txt).
+    container: archlinux:latest
+    steps:
+      - name: Install tools
+        run: |
+          pacman -Syu --noconfirm --needed git cmake ninja clang lld wasi-libc wasi-libc++ \
+            wasi-libc++abi wasi-compiler-rt binaryen python nodejs chromium
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe, for the commit named in the page
+      - name: Build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cmake -S . -B build -G Ninja -DMDW_DESKTOP=OFF -DMDW_WEB_READER=ON
+          cmake --build build
+      - name: Test
+        env:
+          MDW_CHROMIUM: /usr/bin/chromium # named, so a missing browser fails instead of skipping
+        run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web/site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: md-whatever-html
+          path: build/web/md-whatever.html
+
+  pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: md-whatever-html
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --notes ""
+          gh release upload "$TAG" md-whatever.html --repo "$GITHUB_REPOSITORY" --clobber

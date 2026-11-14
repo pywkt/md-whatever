@@ -11,7 +11,16 @@ This file is a sample. It closes by itself when you open your first file.
 - **Drop** files or a folder anywhere on the page.
 - **Paste** Markdown text to read it without saving it first.
 
-Files are read and rendered inside this page. Nothing you open is uploaded anywhere.
+Files are read and rendered inside this page. Nothing you open is uploaded anywhere. The page itself and the libraries for code colors and math do come from the web, and are kept for offline use once fetched. Images from the web stay off unless you turn on "Load images from the web".
+
+In Chrome, Edge, Brave or Arc, files you opened are listed under **Recent** in the sidebar, so you can open them again next time with one click.
+
+## Use it like an app
+
+At [pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/) you can install the reader, and it then works offline too:
+
+- **Chrome, Edge, Brave:** click the install button at the right of the address bar. On a Mac, Markdown files then offer md-whatever under **Open With** in Finder. Choose it in **Get Info → Open with → Change All** to make it the default.
+- **Safari** (macOS Sonoma or later): **File → Add to Dock**. Safari apps can't be picked in Open With, so drop files onto the window instead.
 
 ## Get around
 

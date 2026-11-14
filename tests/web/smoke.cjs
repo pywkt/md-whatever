@@ -9,12 +9,10 @@
 // --online     lets the page fetch highlight.js and MathJax from their CDNs and
 //              checks code colors and math. Without it all http(s) requests are
 //              blocked: the default under ctest, which must not need a network.
-// Chromium: $MDW_CHROMIUM, or chromium / google-chrome-stable on PATH.
+// Chromium: see cdp.cjs.
 'use strict';
-const { spawn, execFileSync } = require('node:child_process');
-const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+const { launch, PAGE_WAIT } = require('./cdp.cjs');
 
 const args = process.argv.slice(2);
 const page = args.find((a) => !a.startsWith('--'));
@@ -25,84 +23,23 @@ if (!page || !['wasm', 'js'].includes(engine)) {
   process.exit(2);
 }
 
-function findChromium() {
-  if (process.env.MDW_CHROMIUM) return process.env.MDW_CHROMIUM;
-  for (const name of ['chromium', 'google-chrome-stable', 'google-chrome']) {
-    try { return execFileSync('which', [name]).toString().trim(); } catch { /* next */ }
-  }
-  return null;
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
 async function main() {
-  const chromium = findChromium();
-  if (!chromium) {
-    console.log('SKIP: no Chromium found (set MDW_CHROMIUM)');
-    process.exit(77); // ctest SKIP_RETURN_CODE
-  }
-  // Chromium puts a Unix socket in its temp dir and refuses to start if that
-  // path is too long (sockets are limited to ~100 bytes), so use /tmp then.
-  const tmp = os.tmpdir().length <= 60 ? os.tmpdir() : '/tmp';
-  const profile = fs.mkdtempSync(path.join(tmp, 'mdw-smoke-'));
-  const port = 9300 + Math.floor(Math.random() * 600);
-  const browser = spawn(chromium, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
-    '--no-first-run', '--no-default-browser-check', '--disable-gpu', 'about:blank'],
-  { stdio: 'ignore', detached: true, env: { ...process.env, TMPDIR: tmp } });
-
-  const problems = [];
+  const b = await launch({ offline: !online });
   const failures = [];
   const check = (ok, what) => { if (!ok) failures.push(what); };
   try {
-    let target;
-    for (let i = 0; i < 100 && !target; i++) { // up to ~10 s
-      try {
-        target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page');
-      } catch { /* not listening yet */ }
-      if (!target) await sleep(100);
-    }
-    if (!target) throw new Error('Chromium did not start');
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((r, j) => { ws.addEventListener('open', r, { once: true }); ws.addEventListener('error', j, { once: true }); });
-    let id = 0;
-    const pending = new Map();
-    let loaded;
-    const loadFired = new Promise((r) => { loaded = r; });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-      if (m.method === 'Page.loadEventFired') loaded();
-      if (m.method === 'Runtime.exceptionThrown') {
-        const d = m.params.exceptionDetails;
-        problems.push('exception: ' + ((d.exception && d.exception.description) || d.text));
-      }
-      if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error')
-        problems.push('console.error: ' + m.params.args.map((a) => a.value ?? a.description).join(' '));
-      // blocked CDN requests are expected offline; anything else logged as an error is not
-      if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error' && !(m.params.entry.url || '').startsWith('http'))
-        problems.push('log: ' + m.params.entry.text);
+    const { send, evaluate } = b;
+    // blocked CDN requests are expected offline; anything else logged as an error is not
+    b.on('Log.entryAdded', ({ entry }) => {
+      if (entry.level === 'error' && !(entry.url || '').startsWith('http')) b.problems.push('log: ' + entry.text);
     });
-    const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
-    const evaluate = async (expr) => {
-      const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
-      if (r.result && r.result.exceptionDetails) throw new Error('evaluate: ' + JSON.stringify(r.result.exceptionDetails));
-      return r.result && r.result.result && r.result.result.value;
-    };
-    await send('Runtime.enable');
     await send('Log.enable');
-    await send('Network.enable');
-    if (!online) await send('Network.setBlockedURLs', { urls: ['http://*', 'https://*'] });
-    await send('Page.enable');
     if (engine === 'js') await send('Page.addScriptToEvaluateOnNewDocument', { source: 'delete globalThis.WebAssembly;' });
-    await send('Page.navigate', { url: 'file://' + path.resolve(page) });
-    // navigate answers before the page has loaded; evaluating now would run in about:blank
-    let timer;
-    await Promise.race([loadFired, new Promise((_, j) => { timer = setTimeout(() => j(new Error('the page did not load')), 15000); })]);
-    clearTimeout(timer);
+    await b.load('file://' + path.resolve(page));
 
     // Wait for the welcome page, then for math to settle (online) or fall back (offline).
     const state = await evaluate(`(async () => {
-      const wait = async (fn, ms) => { for (let t = 0; t < ms; t += 50) { const v = fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } return null; };
+      ${PAGE_WAIT}
       const host = document.getElementById('viewer');
       const art = await wait(() => host && host.shadowRoot && host.shadowRoot.querySelector('article h1') && host.shadowRoot.querySelector('article'), 10000);
       if (!art) return { started: false, url: location.href, empty: (document.getElementById('empty-title') || {}).textContent };
@@ -150,14 +87,9 @@ async function main() {
       }
       check(state.title === 'kitchen-sink.md · md-whatever Reader', 'window title follows the open file');
     }
-    for (const p of problems) failures.push('page error: ' + p);
-    ws.close();
+    for (const p of b.problems) failures.push('page error: ' + p);
   } finally {
-    try { process.kill(-browser.pid, 'SIGTERM'); } catch { /* already gone */ }
-    for (let i = 0; i < 50; i++) { // wait until nothing uses the profile, then delete it
-      try { execFileSync('pgrep', ['-f', 'user-data-dir=' + profile]); await sleep(100); } catch { break; }
-    }
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await b.close();
   }
 
   if (failures.length) {

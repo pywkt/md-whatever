@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Assemble the md-whatever web reader into one self-contained HTML file.
 
-    web/build.py --wasm engine.wasm --asm engine.wasm2js.mjs --out md-whatever.html [--asm-out engine.asm.js]
+    web/build.py --wasm engine.wasm --asm engine.wasm2js.mjs --out md-whatever.html \
+                 [--site site/] [--asm-out engine.asm.js]
 
 --wasm     the engine compiled to WebAssembly (web/engine.cpp + markdown.cpp + md4c)
 --asm      wasm2js's translation of the same module (the JavaScript fallback)
+--out      the single-file page (GitHub Releases, or double-click to open)
+--site     also write the hosted version (GitHub Pages): index.html, the same
+           page linked to a manifest (install, open from Finder), sw.js (offline)
+           and icons
 --asm-out  also write the fallback as inlined in the page, for tests/web
 
 Everything else comes from the repository: the page and its code in web/,
@@ -13,6 +18,7 @@ tests/fixtures and README.md. Standard library only.
 """
 import argparse
 import base64
+import hashlib
 import json
 import mimetypes
 import re
@@ -32,6 +38,13 @@ SAMPLES = {  # name shown in the page -> file in the repo
 }
 ASSET_DIR = REPO / 'tests' / 'fixtures'  # images the samples use, by path relative to here
 ASSETS = ['images/diagram.svg', 'images/wide.png']
+ICONS = ['icon.svg', 'icon-192.png', 'icon-512.png', 'maskable-512.png', 'apple-touch-icon.png']  # web/icons
+
+# What @@HEAD@@ becomes: the hosted site links its manifest and icon files; the
+# single file can't rely on files next to it, so it carries its icon inline.
+SITE_HEAD = """<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">"""
 
 
 def fail(msg):
@@ -123,6 +136,47 @@ def script_safe(name, js):
     return js
 
 
+def write(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    path.write_bytes(data)
+    return data
+
+
+def fill(name, template, parts):
+    """Replaces every @@NAME@@ in one pass (text inside an inserted part is never
+    substituted), after checking the template has exactly the expected ones."""
+    found = set(re.findall(r'@@([A-Z0-9_]+)@@', template))
+    if found != set(parts):
+        missing, unknown = set(parts) - found, found - set(parts)
+        fail(f'{name} placeholders do not match: '
+             + '; '.join(filter(None, [missing and f'missing {sorted(missing)}', unknown and f'unknown {sorted(unknown)}'])))
+    return re.sub(r'@@([A-Z0-9_]+)@@', lambda m: parts[m.group(1)], template)
+
+
+def write_site(site, page):
+    """index.html, manifest, icons, then sw.js, versioned by a hash of the rest."""
+    files = {'index.html': page.encode('utf-8'),
+             'manifest.webmanifest': (WEB / 'manifest.webmanifest').read_bytes()}
+    try:
+        json.loads(files['manifest.webmanifest'])
+    except ValueError as e:
+        fail(f'web/manifest.webmanifest is not valid JSON: {e}')
+    for icon in ICONS:
+        files['icons/' + icon] = (WEB / 'icons' / icon).read_bytes()
+    digest = hashlib.sha256()
+    for name in sorted(files):
+        digest.update(name.encode() + b'\0' + files[name] + b'\0')
+        write(site / name, files[name])
+    precache = ['./' if name == 'index.html' else name for name in sorted(files)]
+    sw = fill('web/sw.js', read(WEB / 'sw.js'), {
+        'VERSION': digest.hexdigest()[:16],
+        'PRECACHE': json.dumps(precache),
+    })
+    write(site / 'sw.js', sw)
+
+
 def md4c_version():
     cmake = read(WEB / 'CMakeLists.txt')
     m = re.search(r'set\(MD4C_WEB_VERSION\s+([\w.]+)\)', cmake)
@@ -134,6 +188,7 @@ def main():
     ap.add_argument('--wasm', required=True, type=Path)
     ap.add_argument('--asm', required=True, type=Path)
     ap.add_argument('--out', required=True, type=Path)
+    ap.add_argument('--site', type=Path)
     ap.add_argument('--asm-out', type=Path)
     args = ap.parse_args()
 
@@ -143,8 +198,7 @@ def main():
 
     asm = script_safe('the JavaScript engine', wrap_asm(read(args.asm)))
     if args.asm_out:
-        args.asm_out.parent.mkdir(parents=True, exist_ok=True)
-        args.asm_out.write_text(asm, encoding='utf-8')
+        write(args.asm_out, asm)
 
     parts = {
         'COMMIT': commit_id(),
@@ -157,17 +211,14 @@ def main():
         'READER_JS': script_safe('web/reader.js', read(WEB / 'reader.js')).rstrip('\n'),
     }
     template = read(WEB / 'reader.html')
-    found = set(re.findall(r'@@([A-Z0-9_]+)@@', template))
-    if found != set(parts):
-        missing, unknown = set(parts) - found, found - set(parts)
-        fail('web/reader.html placeholders do not match: '
-             + '; '.join(filter(None, [missing and f'missing {sorted(missing)}', unknown and f'unknown {sorted(unknown)}'])))
-    # One pass over the template, so text inside an inserted part is never substituted.
-    page = re.sub(r'@@([A-Z0-9_]+)@@', lambda m: parts[m.group(1)], template)
-
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(page, encoding='utf-8')
-    print(f'web/build.py: wrote {args.out} ({len(page.encode()) // 1024} KB)')
+    icon = base64.b64encode((WEB / 'icons' / 'icon.svg').read_bytes()).decode('ascii')
+    page = fill('web/reader.html', template, {
+        **parts, 'HEAD': f'<link rel="icon" href="data:image/svg+xml;base64,{icon}">'})
+    size = len(write(args.out, page)) // 1024
+    print(f'web/build.py: wrote {args.out} ({size} KB)')
+    if args.site:
+        write_site(args.site, fill('web/reader.html', template, {**parts, 'HEAD': SITE_HEAD}))
+        print(f'web/build.py: wrote the site to {args.site}')
 
 
 if __name__ == '__main__':

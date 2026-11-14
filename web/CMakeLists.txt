@@ -1,7 +1,8 @@
 # The web reader: one self-contained HTML page (build/web/md-whatever.html) with
 # md-whatever's Markdown engine compiled to WebAssembly, plus a JavaScript
-# translation of it for browsers that block wasm. Published to GitHub Pages and
-# Releases, never committed.
+# translation of it for browsers that block wasm; and build/web/site/, the same
+# page with a manifest, service worker and icons for GitHub Pages. Published
+# (Pages, Releases; see .github/workflows/web.yml), never committed.
 #
 #   -DMDW_WEB_READER=AUTO  build it if the tools below are installed (default)
 #                    ON    the same, but stop with an error if they aren't
@@ -108,7 +109,8 @@ enable_language(C)
 add_executable(engine_native ${CMAKE_SOURCE_DIR}/tests/web/engine_native.cpp
   engine.cpp ${CMAKE_SOURCE_DIR}/src/markdown.cpp ${_md4c_src}/md4c.c)
 target_include_directories(engine_native PRIVATE ${_md4c_src} ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
-set_target_properties(engine_native PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_target_properties(engine_native PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  AUTOMOC OFF AUTORCC OFF) # no Qt here
 
 # --- the engine, as WebAssembly and JavaScript --------------------------------------
 # Clang tags its output with every feature it may use; wasm-opt then validates
@@ -147,19 +149,24 @@ add_custom_command(OUTPUT ${_o}/engine.wasm2js.mjs
 # --- the page --------------------------------------------------------------------
 # Everything web/build.py reads, so the page is rebuilt when any of it changes.
 file(GLOB _example_themes CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/examples/themes/*.css)
+set(_icons icon.svg icon-192.png icon-512.png maskable-512.png apple-touch-icon.png)
+list(TRANSFORM _icons PREPEND icons/ OUTPUT_VARIABLE _icon_inputs)
 set(_page_inputs build.py reader.html reader.css reader.js lib.js viewer.css samples/welcome.md
+  manifest.webmanifest sw.js ${_icon_inputs}
   ${CMAKE_SOURCE_DIR}/src/themes/base.css ${CMAKE_SOURCE_DIR}/src/themes/default.css
   ${CMAKE_SOURCE_DIR}/src/themes/paper.css ${_example_themes}
   ${CMAKE_SOURCE_DIR}/tests/fixtures/kitchen-sink.md ${CMAKE_SOURCE_DIR}/tests/fixtures/math.md
   ${CMAKE_SOURCE_DIR}/README.md ${CMAKE_SOURCE_DIR}/tests/fixtures/images/diagram.svg
   ${CMAKE_SOURCE_DIR}/tests/fixtures/images/wide.png CMakeLists.txt)
-add_custom_command(OUTPUT ${_o}/md-whatever.html ${_o}/engine.asm.js
+list(TRANSFORM _icon_inputs PREPEND ${_o}/site/ OUTPUT_VARIABLE _site_icons)
+set(_site ${_o}/site/index.html ${_o}/site/manifest.webmanifest ${_o}/site/sw.js ${_site_icons})
+add_custom_command(OUTPUT ${_o}/md-whatever.html ${_o}/engine.asm.js ${_site}
   COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/build.py
           --wasm ${_o}/engine.wasm --asm ${_o}/engine.wasm2js.mjs
-          --out ${_o}/md-whatever.html --asm-out ${_o}/engine.asm.js
+          --out ${_o}/md-whatever.html --site ${_o}/site --asm-out ${_o}/engine.asm.js
   DEPENDS ${_o}/engine.wasm ${_o}/engine.wasm2js.mjs ${_page_inputs}
-  COMMENT "Assembling the web reader (md-whatever.html)" VERBATIM)
-add_custom_target(web-reader ALL DEPENDS ${_o}/md-whatever.html ${_o}/engine.asm.js)
+  COMMENT "Assembling the web reader (md-whatever.html, site/)" VERBATIM)
+add_custom_target(web-reader ALL DEPENDS ${_o}/md-whatever.html ${_o}/engine.asm.js ${_site})
 message(STATUS "Web reader: building ${_o}/md-whatever.html")
 
 # --- tests --------------------------------------------------------------------------
@@ -173,4 +180,7 @@ if(MDW_NODE)
       COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/smoke.cjs ${_o}/md-whatever.html --engine=${engine})
     set_tests_properties(web-smoke-${engine} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
   endforeach()
+  # The hosted version on a local server: install, offline, Recent, launches.
+  add_test(NAME web-site COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/site.cjs ${_o}/site)
+  set_tests_properties(web-site PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
 endif()

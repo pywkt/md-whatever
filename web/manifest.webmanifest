@@ -1,0 +1,24 @@
+{
+  "name": "md-whatever",
+  "short_name": "md-whatever",
+  "description": "A read-only Markdown viewer. Files are read and rendered on your computer, never uploaded.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eff0f1",
+  "theme_color": "#eff0f1",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": { "text/markdown": [".md", ".markdown", ".mdown", ".mkd", ".mkdn", ".mdwn"] }
+    }
+  ],
+  "launch_handler": { "client_mode": "focus-existing" }
+}

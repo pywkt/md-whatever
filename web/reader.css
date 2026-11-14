@@ -299,3 +299,12 @@ button, select, input { font: inherit; color: inherit; }
   @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 6px); } }
 }
 
+
+/* ---- recently opened (Chromium: file handles kept in IndexedDB) ---- */
+.files.recent { flex: 0 1 auto; max-height: 36%; border-top: 1px solid var(--ui-rule); padding-top: 4px; }
+.files-label .link-btn { font-size: 11px; letter-spacing: 0; text-transform: none; }
+
+/* ---- "updated" notice (hosted version) ---- */
+.toast.update { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; }
+.toast.update .btn { flex: none; min-height: 26px; color: var(--ui-text); }
+.toast.update .icon-btn { flex: none; color: inherit; }

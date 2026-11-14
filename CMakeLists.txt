@@ -11,6 +11,14 @@ endif()
 
 include(GNUInstallDirs)
 
+# -DMDW_DESKTOP=OFF builds only the web reader (web/), without Qt; CI uses it.
+option(MDW_DESKTOP "Build the desktop app (needs Qt 6)" ON)
+if(NOT MDW_DESKTOP)
+  enable_testing()
+  add_subdirectory(web)
+  return()
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Svg Test)
 find_package(KF6SyntaxHighlighting REQUIRED)
 find_package(md4c REQUIRED)

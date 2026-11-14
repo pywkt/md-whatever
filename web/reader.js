@@ -666,6 +666,7 @@ async function intake(entries, { explicit = true, from = '' } = {}) {
       skipped.push(name + ' (over 20 MB)');
       continue;
     }
+    if (explicit && entry.handle) recent.add(entry.handle);
     const open = await findOpen(entry, file);
     if (open) {
       await refreshDoc(open, file);
@@ -779,13 +780,17 @@ async function pickFiles() {
   $('file-input').click();
 }
 
+async function openFolder(dir) {
+  recent.add(dir);
+  const out = [];
+  await walkHandle(dir, dir.name + '/', out);
+  await intake(out, { explicit: false, from: dir.name });
+}
+
 async function pickFolder() {
   if (window.showDirectoryPicker) {
     try {
-      const dir = await window.showDirectoryPicker({ mode: 'read' });
-      const out = [];
-      await walkHandle(dir, dir.name + '/', out);
-      await intake(out, { explicit: false, from: dir.name });
+      await openFolder(await window.showDirectoryPicker({ mode: 'read' }));
       return;
     } catch (err) {
       if (err && err.name === 'AbortError') return;
@@ -818,6 +823,7 @@ async function onDrop(e) {
     const handle = g.handle ? await g.handle : null;
     if (handle && handle.kind === 'directory') {
       folder = folder || handle.name;
+      recent.add(handle);
       await walkHandle(handle, handle.name + '/', walked);
     } else if (handle) {
       picked.push({ path: handle.name, handle });
@@ -830,6 +836,170 @@ async function onDrop(e) {
   }
   if (walked.length || folder) await intake(walked, { explicit: false, from: folder });
   if (picked.length) await intake(picked);
+}
+
+/* ---------- recently opened (Chromium: file and folder handles kept in IndexedDB) ---------- */
+
+const recent = (() => {
+  // Only browsers with the file pickers hand out handles that survive a reload.
+  const supported = !!(window.showOpenFilePicker && window.indexedDB);
+  const MAX = 12;
+  let items = []; // newest first: { key, name, handle, when }
+  let dbPromise = null;
+  let chain = Promise.resolve(); // adds run one at a time, so duplicates are caught
+
+  function db() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open('md-whatever-reader', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('recent', { keyPath: 'key' });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    return dbPromise;
+  }
+
+  async function store(mode, fn) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const t = d.transaction('recent', mode);
+      const req = fn(t.objectStore('recent'));
+      t.oncomplete = () => resolve(req && req.result);
+      t.onerror = () => reject(t.error);
+    });
+  }
+
+  async function load() {
+    if (!supported) return;
+    try {
+      items = ((await store('readonly', (s) => s.getAll())) || []).sort((a, b) => b.when - a.when);
+    } catch (err) {
+      items = []; // storage blocked: the list just stays empty
+    }
+    render();
+  }
+
+  async function addNow(handle) {
+    let same = null;
+    for (const it of items) {
+      try {
+        if (await it.handle.isSameEntry(handle)) { same = it; break; }
+      } catch (err) { /* moved or gone: not the same */ }
+    }
+    const item = { key: same ? same.key : `${Date.now()}-${Math.random()}`, name: handle.name, handle, when: Date.now() };
+    items = [item, ...items.filter((it) => it !== same)];
+    const dropped = items.slice(MAX);
+    items = items.slice(0, MAX);
+    render();
+    await store('readwrite', (s) => {
+      s.put(item);
+      for (const it of dropped) s.delete(it.key);
+    });
+  }
+
+  function add(handle) {
+    if (supported && handle) chain = chain.then(() => addNow(handle)).catch(() => {});
+  }
+
+  function remove(item) {
+    items = items.filter((it) => it !== item);
+    render();
+    store('readwrite', (s) => s.delete(item.key)).catch(() => {});
+  }
+
+  function clear() {
+    items = [];
+    render();
+    store('readwrite', (s) => s.clear()).catch(() => {});
+  }
+
+  async function reopen(item) {
+    const { handle } = item;
+    try {
+      // Read access lapses when the page closes; asking again is one click.
+      let state = await handle.queryPermission({ mode: 'read' });
+      if (state !== 'granted') state = await handle.requestPermission({ mode: 'read' });
+      if (state !== 'granted') return;
+      if (handle.kind === 'directory') {
+        await openFolder(handle);
+      } else {
+        await handle.getFile(); // throws if it was moved or deleted
+        await intake([{ path: handle.name, handle }]);
+      }
+      if (narrow.matches) setRail(false);
+    } catch (err) {
+      if (err && err.name === 'NotFoundError') {
+        remove(item);
+        toast(`${item.name} was moved or deleted, so it is no longer in Recent.`);
+      } else {
+        toast(`Could not open ${item.name}: ${(err && err.message) || err}`);
+      }
+    }
+  }
+
+  function render() {
+    $('recent').hidden = !items.length;
+    $('recent-list').replaceChildren(...items.map((item) => {
+      const li = el('li', 'file');
+      const main = el('button', 'file-main');
+      main.type = 'button';
+      main.title = item.handle.kind === 'directory' ? `Open the folder ${item.name} again` : `Open ${item.name} again`;
+      main.append(el('span', 'file-name', item.name), el('span', 'file-meta', item.handle.kind === 'directory' ? 'Folder' : 'File'));
+      main.addEventListener('click', () => reopen(item));
+      li.append(main);
+      return li;
+    }));
+  }
+
+  return { load, add, clear };
+})();
+
+/* ---------- the installed app: files opened from Finder or Explorer, offline, updates ---------- */
+
+// Chromium-based browsers, app installed: "Open With" md-whatever, or a
+// double-click once it's the default, hands the files over here (manifest
+// file_handlers). With launch_handler focus-existing, an open window gets them.
+function acceptLaunches() {
+  if (!('launchQueue' in window)) return;
+  window.launchQueue.setConsumer((params) => {
+    const handles = (params.files || []).filter((h) => h.kind === 'file');
+    if (handles.length) intake(handles.map((h) => ({ path: h.name, handle: h })));
+  });
+}
+
+// Only the hosted site (it links a manifest) has a service worker to register.
+function serviceWorker() {
+  if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)
+      || !document.querySelector('link[rel="manifest"]')) return;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // A new version waits until every window is closed; offer to switch now.
+    const offer = () => {
+      if (reg.waiting && navigator.serviceWorker.controller) $('update').hidden = false;
+    };
+    offer();
+    reg.addEventListener('updatefound', () => {
+      const incoming = reg.installing;
+      if (incoming) incoming.addEventListener('statechange', () => { if (incoming.state === 'installed') offer(); });
+    });
+    $('update-reload').addEventListener('click', () => {
+      reloading = true;
+      if (reg.waiting) reg.waiting.postMessage('skip-waiting');
+      else location.reload();
+    });
+    // An app window can stay open for days; look for a new version now and then.
+    let checked = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || Date.now() - checked < 3600e3) return;
+      checked = Date.now();
+      reg.update().catch(() => {});
+    });
+  }).catch(() => { /* no offline copy then; the page works the same */ });
+  $('update-dismiss').addEventListener('click', () => { $('update').hidden = true; });
 }
 
 /* ---------- links inside a document ---------- */
@@ -905,6 +1075,7 @@ function bind() {
   });
 
   for (const id of ['open-files', 'empty-open-files']) $(id).addEventListener('click', pickFiles);
+  $('recent-clear').addEventListener('click', () => recent.clear());
   for (const id of ['open-folder', 'empty-open-folder']) $(id).addEventListener('click', pickFolder);
   for (const id of ['show-welcome', 'empty-welcome']) $(id).addEventListener('click', () => {
     openSample('welcome.md');
@@ -1040,6 +1211,9 @@ async function start() {
   }
   host.dataset.engine = engine.kind;
   openSample('welcome.md');
+  acceptLaunches(); // files from a launch replace the welcome page, as any opened file does
+  recent.load();
+  serviceWorker();
 }
 
 start();
