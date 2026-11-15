@@ -150,6 +150,10 @@ saves you some time.
 
 ## Install
 
+**On macOS, Windows or another system:** there's nothing to install. Open
+[pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/), and see
+[The web reader](#the-web-reader) for making it an app.
+
 On **Arch Linux** or anything based on it (EndeavourOS, Manjaro, …):
 
 1. Get the code: download it as a ZIP and unpack it, or `git clone` it.
@@ -261,11 +265,8 @@ What you get:
 - **Everything the app renders:** tables, task lists, footnotes, front matter,
   math (MathJax, with the app's settings), and every theme in light and dark,
   picked in the sidebar.
-- **Editing.** `e` or **Edit** shows the Markdown source, and `Esc` or **Read**
-  shows the result. A dot marks unsaved changes. Saving keeps the file's line
-  endings, encoding and byte order mark, so saving a file you didn't change
-  gives back the same bytes. If the file changes on disk while you have unsaved
-  changes, you choose which version to keep.
+- **Editing** the Markdown source, with saving back to the file in browsers
+  that allow it. See [Editing](#editing).
 - **Live reload**, and **Recent** files in the sidebar, in the browsers that
   allow it (below).
 
@@ -282,8 +283,44 @@ page do with your files:
 | Install as an app | install button in the address bar | no | **File → Add to Dock** (macOS Sonoma or later) | no |
 | Open `.md` files from Finder / Explorer | yes, once installed (**Open With**) | no | no: drop files on the window | no |
 
-The first save of each file in Chrome, Edge, Brave or Arc asks for permission to
-write to it.
+**On a Mac,** the most app-like setup is Chrome, Edge or Brave: open the hosted
+page, click the install button at the right of the address bar, and Markdown
+files then offer md-whatever under **Open With** in Finder. To make it the
+default, use **Get Info → Open with → Change All**. In Safari, **File → Add to
+Dock** gives you an app window, but Safari apps can't be picked in Open With, so
+drop files onto the window instead.
+
+### Editing
+
+Press **Edit** in the top bar, or `e`, and the document turns into its Markdown
+source, in the theme's monospace font and colors. **Read** or `Esc` shows the
+rendered result of your changes. Every open file keeps its own mode, changes and
+undo history while you switch between files. `Tab` inserts two spaces;
+`Shift+Tab` moves the keyboard focus out of the editor.
+
+- **Unsaved changes** show as a dot before the file's name in the sidebar, the
+  top bar and the browser tab, and a **Save** button appears. Closing that file,
+  or the whole tab, asks first.
+- **Saving** (`⌘S` / `Ctrl+S`) writes to the file you opened in Chrome, Edge,
+  Brave and Arc. The first save of each file asks for permission to write to
+  it. `⌘⇧S` / `Ctrl+Shift+S` saves to a new file instead, which the document
+  then refers to.
+- **Safari and Firefox** don't let a page write to your files, so there **Save**
+  becomes **Download** and saves a copy to your downloads folder; the original
+  file stays as it was. The first time you edit a file there, a note says so.
+- **Your file stays your file.** Saving keeps its line endings (LF or CRLF), its
+  encoding (UTF-8, or Latin-1 for older files) and its byte order mark, so
+  saving a file you didn't change gives back exactly the same bytes. If you type
+  a character a Latin-1 file can't hold, md-whatever asks before switching the
+  file to UTF-8.
+- **If the file changes on disk** (say, in another editor) while you have
+  unsaved changes, a bar offers **Reload from disk** or **Keep my edits**, and a
+  later save asks before overwriting the newer file. Without unsaved changes, the
+  editor just picks up the new version.
+- **Samples** (the welcome page and the bundled documents) can be edited as
+  scratch space. Saving one creates a new file.
+
+There's no autosave: unsaved changes live only in the open tab.
 
 Keys are the app's (`j`/`k`, `Space`, `g`/`G`, `r`) plus `[` / `]` for the
 previous / next open file, `+` / `-` / `0` for zoom, `o` to open files, `e` /
