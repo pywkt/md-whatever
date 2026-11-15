@@ -17,6 +17,7 @@ namespace mdw {
 
 class Viewer;
 class FindBar;
+class NoticeBar;
 
 // State shared by all windows: theme, highlighter, theme-file watching.
 class AppContext : public QObject
@@ -61,6 +62,10 @@ public:
     // The right-click menu (separate from showing it, for tests).
     QMenu *createContextMenu();
 
+    // Opens the current file in the user's text editor (`e`, menu Edit).
+    void editSource();
+    bool canEdit() const; // a file, not stdin or a folder
+
 signals:
     void mathSettled(); // pending math rendered or given up
 
@@ -89,10 +94,12 @@ private:
     void updateTitle();
     void setupShortcuts();
     void maybeScreenshot();
+    void showNotice(const QString &text);
 
     AppContext &m_ctx;
     Viewer *m_viewer;
     FindBar *m_findBar;
+    NoticeBar *m_notice = nullptr; // created by showNotice()
 
     QString m_path;        // empty when reading stdin
     QByteArray m_stdin;

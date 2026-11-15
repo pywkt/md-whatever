@@ -39,6 +39,8 @@ Not on Linux? The same engine and themes also run in a browser tab:
   or read from a pipe: `curl -s … | md-whatever -`.
 - **Live reload.** Save the file in your editor and the window updates on its
   own, keeping your place, even with editors that save by replacing the file.
+- **`e` opens the file in your editor**, the one your desktop uses for text
+  files (or any you choose), so fixing a typo is one keypress away.
 - **Links work:** links to other `.md` files open in the same window (with
   back/forward), `#section` links scroll, web links open in your browser,
   and links to other local files open in their usual app.
@@ -103,9 +105,9 @@ saves you some time.
 
 **On purpose. These aren't coming:**
 
-- **Editing.** It's a reader. Use your editor; md-whatever reloads when you save.
-  (The [web reader](#the-web-reader) can edit, since a browser tab has no
-  editor next to it.)
+- **Editing.** It's a reader. Press `e` to open the file in your own editor;
+  md-whatever reloads when you save. (The [web reader](#the-web-reader) can
+  edit, since a browser tab has no editor next to it.)
 - **A web engine or JavaScript.** That's the whole point. Pages are drawn by
   [litehtml](https://github.com/litehtml/litehtml), a small HTML/CSS renderer.
 - **Network access.** It never fetches anything. **Images from the web aren't
@@ -218,20 +220,43 @@ Want to see everything it can render? Open
 | `n` / `N`, `F3` / `Shift+F3` | next / previous match |
 | `Alt+Left` / `Alt+Right` | back / forward (after following a link) |
 | `r` / `F5` | reload |
+| `e` | open the file in your editor ([Editing](#editing)) |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | zoom in / out / reset |
 | `Ctrl+C` | copy the selection |
 | `q` / `Ctrl+W` / `Esc` | close (`Esc` closes the find bar first) |
 
 ### Right-click menu
 
-Reload · Copy · Find · **Theme** (pick a theme; Follow System / Light / Dark;
+Edit · Reload · Copy · Find · **Theme** (pick a theme; Follow System / Light / Dark;
 Open Themes Folder) · Open Containing Folder.
+
+### Editing
+
+`e` (or right-click → **Edit**) opens the file you're reading in a text
+editor, and every save shows up in the window, keeping your place. After you
+follow a link, it's the linked file that opens. On a "File not found" page,
+the editor creates the file. md-whatever starts the editor and leaves it alone:
+close either one whenever you like.
+
+Which editor: the `editor=` line in `md-whatever.conf` if there is one,
+otherwise your desktop's default app for plain text files (Kate on KDE).
+`{file}` stands for the file; without it, the file goes at the end.
+
+```ini
+editor=kate
+editor=code -g {file}
+editor=konsole -e nvim {file}
+```
+
+Terminal editors (vim, nano, …) need a terminal to run in, as in the last line.
+If no editor can be found or started, a note at the bottom of the window says
+why.
 
 ### Where things live
 
 | Path | What |
 |---|---|
-| `~/.config/md-whatever/md-whatever.conf` | settings: `theme=`, `appearance=`, `code-theme=` |
+| `~/.config/md-whatever/md-whatever.conf` | settings: `theme=`, `appearance=`, `code-theme=`, `editor=` |
 | `~/.config/md-whatever/user.css` | your tweaks, applied on top of any theme |
 | `~/.config/md-whatever/themes/*.css` | your themes |
 | `~/.config/md-whatever/state.conf` | remembered window size and zoom |
@@ -266,7 +291,7 @@ What you get:
   math (MathJax, with the app's settings), and every theme in light and dark,
   picked in the sidebar.
 - **Editing** the Markdown source, with saving back to the file in browsers
-  that allow it. See [Editing](#editing).
+  that allow it. See [Editing in the browser](#editing-in-the-browser).
 - **Live reload**, and **Recent** files in the sidebar, in the browsers that
   allow it (below).
 
@@ -290,7 +315,7 @@ default, use **Get Info → Open with → Change All**. In Safari, **File → Ad
 Dock** gives you an app window, but Safari apps can't be picked in Open With, so
 drop files onto the window instead.
 
-### Editing
+### Editing in the browser
 
 Press **Edit** in the top bar, or `e`, and the document turns into its Markdown
 source, in the theme's monospace font and colors. **Read** or `Esc` shows the
@@ -468,7 +493,8 @@ to GitHub Pages from `main` and attaches it to releases.
 Layout: `src/markdown.cpp` turns Markdown into HTML (plain C++, no Qt),
 `src/document.cpp` assembles the page, `src/math.cpp` talks to the MathJax
 helper (`data/mathjax-helper.cjs`), `src/theme.cpp` handles themes and
-settings, and `src/mainwindow.cpp` is the window. `third_party/qlitehtml` is a
+settings, `src/editor.cpp` finds the editor for `e`, and `src/mainwindow.cpp` is
+the window. `third_party/qlitehtml` is a
 vendored copy of the Qt widget for litehtml, with a few local fixes listed in
 its `UPSTREAM_COMMIT`. `web/` is the web reader: `engine.cpp` wraps
 `src/markdown.cpp` for WebAssembly, `reader.js` and `lib.js` are the page, and

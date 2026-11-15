@@ -73,6 +73,8 @@ add_library(mdw_core STATIC
   src/viewer.cpp src/viewer.h
   src/mainwindow.cpp src/mainwindow.h
   src/findbar.cpp src/findbar.h
+  src/noticebar.cpp src/noticebar.h
+  src/editor.cpp src/editor.h
   src/timing.cpp src/timing.h
   src/resources.qrc)
 target_include_directories(mdw_core PUBLIC src)
@@ -89,6 +91,9 @@ enable_testing()
 add_executable(test_markdown tests/test_markdown.cpp)
 target_link_libraries(test_markdown PRIVATE mdw_markdown Qt6::Test)
 add_test(NAME markdown COMMAND test_markdown)
+add_executable(test_editor tests/test_editor.cpp)
+target_link_libraries(test_editor PRIVATE mdw_core Qt6::Test)
+add_test(NAME editor COMMAND test_editor)
 add_executable(test_viewer tests/test_viewer.cpp)
 target_compile_definitions(test_viewer PRIVATE MDW_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures")
 target_link_libraries(test_viewer PRIVATE mdw_core Qt6::Test)

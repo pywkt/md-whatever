@@ -2,6 +2,7 @@
 // palette and theme following, math. Runs offscreen with a throwaway config.
 #include "findbar.h"
 #include "mainwindow.h"
+#include "noticebar.h"
 #include "viewer.h"
 
 #include <QApplication>
@@ -359,6 +360,96 @@ private slots:
         QFile::remove(conf);
         ctx->setAppearance(Theme::Appearance::System);
         QFile::remove(conf);
+    }
+
+    // "Edit" runs the editor= command on the current file. touch and cp stand
+    // in for an editor, so nothing pops up.
+    static QAction *menuAction(MainWindow *w, const QString &text)
+    {
+        QMenu *menu = w->createContextMenu();
+        menu->deleteLater();
+        for (QAction *a : menu->actions())
+            if (a->text().remove(QLatin1Char('&')) == text)
+                return a;
+        return nullptr;
+    }
+    static void setEditor(const QByteArray &setting)
+    {
+        QDir().mkpath(Theme::configDir());
+        writeAtomically(Theme::configDir() + QStringLiteral("/md-whatever.conf"), "editor=" + setting + "\n");
+    }
+
+    void editOpensTheCurrentFile()
+    {
+        QTemporaryDir dir;
+        const QString a = dir.filePath(QStringLiteral("a doc.md")), b = dir.filePath(QStringLiteral("b.md"));
+        writeAtomically(a, "# A\n\n[to b](b.md)\n");
+        writeAtomically(b, "# B\n");
+        setEditor("touch {file}.opened");
+
+        MainWindow *w = open(a);
+        QAction *edit = menuAction(w, QStringLiteral("Edit"));
+        QVERIFY(edit);
+        QVERIFY(edit->isEnabled());
+        QCOMPARE(edit->shortcut(), QKeySequence(Qt::Key_E));
+        QTest::keyClick(w, Qt::Key_E);
+        QTRY_VERIFY(QFile::exists(a + QStringLiteral(".opened"))); // a path with a space: one argument
+
+        // After following a link, Edit opens the linked file.
+        emit viewer(w)->linkClicked(QUrl(QStringLiteral("b.md")));
+        QTRY_COMPARE(w->windowTitle(), QStringLiteral("b.md — md-whatever"));
+        menuAction(w, QStringLiteral("Edit"))->trigger();
+        QTRY_VERIFY(QFile::exists(b + QStringLiteral(".opened")));
+        QVERIFY(!w->findChild<NoticeBar *>());
+        delete w;
+        QFile::remove(Theme::configDir() + QStringLiteral("/md-whatever.conf"));
+    }
+
+    void editCreatesAMissingFile()
+    {
+        // The "File not found" page can be edited: the editor creates the
+        // file and the window shows it.
+        QTemporaryDir dir;
+        const QString src = dir.filePath(QStringLiteral("src.txt")), path = dir.filePath(QStringLiteral("new.md"));
+        writeAtomically(src, "# Created by the editor\n");
+        setEditor("cp " + src.toUtf8() + " {file}");
+        MainWindow *w = open(path);
+        QVERIFY(w->currentHtml().contains(QLatin1String("File not found")));
+        QTest::keyClick(w, Qt::Key_E);
+        QTRY_VERIFY(w->currentHtml().contains(QLatin1String("Created by the editor")));
+        delete w;
+        QFile::remove(Theme::configDir() + QStringLiteral("/md-whatever.conf"));
+    }
+
+    void editExplainsWhatWentWrong()
+    {
+        setEditor("/nonexistent/editor --flag");
+        MainWindow *w = open(kFixtures + QStringLiteral("/kitchen-sink.md"));
+        QVERIFY(!w->findChild<NoticeBar *>()); // made only when needed
+        QTest::keyClick(w, Qt::Key_E);
+        auto *notice = w->findChild<NoticeBar *>();
+        QVERIFY(notice);
+        QTRY_VERIFY(notice->isVisible());
+        QVERIFY(notice->text().contains(QLatin1String("Couldn't start the editor \"/nonexistent/editor\"")));
+        QVERIFY(notice->text().contains(QLatin1String("editor=")));
+        QTest::keyClick(w, Qt::Key_Escape); // closes the notice first, not the window
+        QVERIFY(!notice->isVisible());
+        QVERIFY(w->isVisible());
+        delete w;
+
+        // stdin and folders have no file to edit
+        auto *s = new MainWindow(*ctx);
+        s->openStdin("# piped\n");
+        s->show();
+        QVERIFY(QTest::qWaitForWindowExposed(s));
+        QVERIFY(!menuAction(s, QStringLiteral("Edit"))->isEnabled());
+        QTest::keyClick(s, Qt::Key_E);
+        QVERIFY(s->findChild<NoticeBar *>()->text().contains(QLatin1String("standard input")));
+        delete s;
+        MainWindow *d = open(kFixtures);
+        QVERIFY(!menuAction(d, QStringLiteral("Edit"))->isEnabled());
+        delete d;
+        QFile::remove(Theme::configDir() + QStringLiteral("/md-whatever.conf"));
     }
 
     void cleanupTestCase()

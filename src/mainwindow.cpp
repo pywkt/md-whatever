@@ -1,6 +1,8 @@
 #include "mainwindow.h"
 #include "document.h"
+#include "editor.h"
 #include "findbar.h"
+#include "noticebar.h"
 #include "timing.h"
 #include "viewer.h"
 
@@ -12,6 +14,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QMenu>
+#include <QProcess>
 #include <QScrollBar>
 #include <QSettings>
 #include <QShortcut>
@@ -179,6 +182,7 @@ void MainWindow::setupShortcuts()
     add({QKeySequence(Qt::ALT | Qt::Key_Left), QKeySequence(Qt::Key_Back)}, [this] { goBack(); });
     add({QKeySequence(Qt::ALT | Qt::Key_Right), QKeySequence(Qt::Key_Forward)}, [this] { goForward(); });
     add({QKeySequence(Qt::Key_R), QKeySequence(Qt::Key_F5)}, [this] { onFileChanged(); });
+    add({QKeySequence(Qt::Key_E)}, [this] { editSource(); });
     add({QKeySequence(Qt::CTRL | Qt::Key_Equal), QKeySequence(Qt::CTRL | Qt::Key_Plus), QKeySequence::ZoomIn},
         [this] { setZoom(m_zoom * 1.1); });
     add({QKeySequence(Qt::CTRL | Qt::Key_Minus), QKeySequence::ZoomOut}, [this] { setZoom(m_zoom / 1.1); });
@@ -188,6 +192,8 @@ void MainWindow::setupShortcuts()
         if (m_findBar->isVisible()) {
             m_findBar->hide();
             m_viewer->setFocus();
+        } else if (m_notice && m_notice->isVisible()) {
+            m_notice->hide();
         } else {
             close();
         }
@@ -361,6 +367,44 @@ void MainWindow::onFileChanged()
         m_watcher.addPath(m_path);
 }
 
+// Created on first use, so opening a window doesn't pay for it.
+void MainWindow::showNotice(const QString &text)
+{
+    if (!m_notice) {
+        m_notice = new NoticeBar(this);
+        static_cast<QVBoxLayout *>(layout())->insertWidget(1, m_notice); // between the page and the find bar
+    }
+    m_notice->showMessage(text);
+}
+
+bool MainWindow::canEdit() const
+{
+    return !m_path.isEmpty() && !QFileInfo(m_path).isDir();
+}
+
+void MainWindow::editSource()
+{
+    if (m_path.isEmpty()) {
+        showNotice(tr("This text came from standard input, so there's no file to edit."));
+        return;
+    }
+    if (QFileInfo(m_path).isDir()) {
+        showNotice(tr("This is a folder, not a file, so there's nothing to edit."));
+        return;
+    }
+    const EditorCommand cmd = resolveEditor(m_path);
+    if (!cmd.error.isEmpty()) {
+        showNotice(cmd.error);
+        return;
+    }
+    // Detached: the editor lives on its own, and live reload shows each save.
+    // A file that doesn't exist yet is fine: the editor creates it, and the
+    // folder watch picks it up.
+    const QString dir = QFileInfo(m_path).absolutePath();
+    if (!QProcess::startDetached(cmd.program, cmd.args, QFileInfo(dir).isDir() ? dir : QString()))
+        showNotice(tr("Couldn't start the editor \"%1\". ").arg(cmd.program) + editorSettingHint());
+}
+
 void MainWindow::updateTitle()
 {
     const QString name = m_path.isEmpty() ? tr("(stdin)") : QFileInfo(m_path).fileName();
@@ -454,6 +498,8 @@ void MainWindow::find(bool backward, bool incremental)
 QMenu *MainWindow::createContextMenu()
 {
     auto *menu = new QMenu(this);
+    menu->addAction(QIcon::fromTheme(QStringLiteral("document-edit")), tr("Edit"), QKeySequence(Qt::Key_E),
+                    this, &MainWindow::editSource)->setEnabled(canEdit());
     menu->addAction(QIcon::fromTheme(QStringLiteral("view-refresh")), tr("Reload"), QKeySequence(Qt::Key_F5),
                     this, &MainWindow::onFileChanged)->setEnabled(!m_path.isEmpty());
     QAction *copy = menu->addAction(QIcon::fromTheme(QStringLiteral("edit-copy")), tr("Copy"), QKeySequence::Copy, this, [this] {
