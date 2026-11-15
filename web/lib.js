@@ -94,10 +94,72 @@ function titleOf(text) {
   return m ? m[1].replace(/[*_`]/g, '').trim() : '';
 }
 
+/* ---------- file bytes <-> text, so saving gives back the file it read ---------- */
+
+// Browsers decode "iso-8859-1" as windows-1252, which puts 27 printable
+// characters (€, curly quotes, ...) at 0x80-0x9F. Encoding needs the way back.
+const CP1252 = '€\x81‚ƒ„…†‡ˆ‰Š‹Œ\x8dŽ\x8f'
+  + '\x90‘’“”•–—˜™š›œ\x9džŸ';
+const CP1252_BACK = new Map([...CP1252].map((ch, i) => [ch, 0x80 + i]));
+
+// bytes: an ArrayBuffer or Uint8Array, as read from the file.
+// Returns { binary: true } for files with NUL bytes in their first 8000 bytes,
+// otherwise { text, encoding: 'utf-8' | 'latin1', bom }. The text keeps its line
+// endings; a UTF-8 byte order mark is dropped from it and reported as bom.
+function decodeBytes(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (u8.subarray(0, 8000).includes(0)) return { binary: true };
+  const bom = u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf;
+  try {
+    return { text: new TextDecoder('utf-8', { fatal: true }).decode(u8), encoding: 'utf-8', bom };
+  } catch (err) {
+    return { text: new TextDecoder('iso-8859-1').decode(u8), encoding: 'latin1', bom: false };
+  }
+}
+
+// The way back: { bytes } or, for a Latin-1 file with a character it cannot
+// hold, { unencodable: thatCharacter }.
+function encodeText(text, { encoding = 'utf-8', bom = false } = {}) {
+  if (encoding !== 'latin1') {
+    const body = new TextEncoder().encode(text);
+    if (!bom) return { bytes: body };
+    const bytes = new Uint8Array(body.length + 3);
+    bytes.set([0xef, 0xbb, 0xbf]);
+    bytes.set(body, 3);
+    return { bytes };
+  }
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    const b = c < 0x80 || (c >= 0xa0 && c <= 0xff) ? c : CP1252_BACK.get(text[i]);
+    if (b === undefined) return { unencodable: String.fromCodePoint(text.codePointAt(i)) };
+    bytes[i] = b;
+  }
+  return { bytes };
+}
+
+// What a <textarea> does to line endings: CRLF and lone CR become LF.
+const normalizeNewlines = (text) => text.replace(/\r\n?/g, '\n');
+
+// The file's line ending: CRLF if most of its lines end that way, else LF.
+function lineEnding(text) {
+  let crlf = 0;
+  let lf = 0;
+  for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) {
+    if (i > 0 && text[i - 1] === '\r') crlf++;
+    else lf++;
+  }
+  return crlf > lf ? '\r\n' : '\n';
+}
+
+// Text from the editor (LF only) with the file's line ending put back.
+const withLineEnding = (text, eol) => (eol === '\n' ? normalizeNewlines(text) : normalizeNewlines(text).replace(/\n/g, eol));
+
 return {
   mix, paletteCss, scopeSelector, scopeCss,
   baseName, dirName, extOf, resolvePath, safeDecode, splitHref, hasScheme,
   titleOf,
+  decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
 };
 })();
 

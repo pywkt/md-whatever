@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 const DATA = JSON.parse($('mdw-data').textContent);
 const {
   paletteCss, scopeCss, baseName, dirName, extOf, resolvePath, splitHref, hasScheme, titleOf,
+  decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
 } = mdwLib; // web/lib.js
 
 // Same list as kMarkdownSuffixes in md-whatever's mainwindow.cpp.
@@ -115,12 +116,12 @@ function el(tag, className, text) {
 }
 
 let toastTimer = 0;
-function toast(message) {
+function toast(message, ms = 4200) {
   const t = $('toast');
   t.textContent = message;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 4200);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 /* ---------- themes: a port of Theme::css() from md-whatever's theme.cpp ---------- */
@@ -173,29 +174,30 @@ for (const [path, url] of Object.entries(DATA.assets)) sampleAssets.set(path, { 
 
 const current = () => docs.find((d) => d.id === activeId) || null;
 
+// text is the file as last read or saved (line endings as in the file).
+// Editing: draft is the editor's text (LF only) once the editor exists, and
+// dirty says it differs from text. encoding and bom are how to write it back.
 function makeDoc(fields) {
   return Object.assign({
-    id: ++seq, name: '', path: '', kind: 'file', text: '', banner: '',
+    id: ++seq, name: '', path: '', kind: 'file', text: '', banner: '', encoding: 'utf-8', bom: false,
     handle: null, mtime: 0, size: 0, article: null, scroll: 0,
+    editing: false, editor: null, editScroll: 0, draft: null, base: null, dirty: false, conflict: null,
   }, fields);
 }
+
+const sourceOf = (d) => (d.draft != null ? d.draft : d.text);
 
 function metaOf(d) {
   if (d.kind === 'sample') return 'Sample';
   if (d.kind === 'paste') return 'Pasted text';
-  if (!('title' in d)) d.title = titleOf(d.text);
+  if (!('title' in d)) d.title = titleOf(sourceOf(d));
   return [dirName(d.path), d.title].filter(Boolean).join(' · ');
 }
 
 async function readText(file) {
-  const buf = await file.arrayBuffer();
-  const head = new Uint8Array(buf, 0, Math.min(buf.byteLength, 8000));
-  if (head.includes(0)) return { binary: true };
-  try {
-    return { text: new TextDecoder('utf-8', { fatal: true }).decode(buf), banner: '' };
-  } catch (err) {
-    return { text: new TextDecoder('iso-8859-1').decode(buf), banner: NOT_UTF8 };
-  }
+  const r = decodeBytes(await file.arrayBuffer()); // lib.js: BOM, encoding
+  if (!r.binary) r.banner = r.encoding === 'latin1' ? NOT_UTF8 : '';
+  return r;
 }
 
 /* ---------- rendering one document ---------- */
@@ -430,9 +432,10 @@ async function typesetIn(article) {
 
 function buildArticle(d) {
   const article = el('article', 'markdown-body');
+  const text = sourceOf(d);
   let html;
   try {
-    html = engine.render(d.text);
+    html = engine.render(text);
   } catch (err) {
     html = '<h1>This file could not be rendered</h1>\n<p><code></code></p>';
     article.dataset.error = String((err && err.message) || err);
@@ -447,7 +450,7 @@ function buildArticle(d) {
   prepImages(tpl.content, d);
   if (d.banner) article.append(el('div', 'banner', d.banner));
   article.append(tpl.content);
-  if (!d.text.trim()) article.append(el('p', 'mdw-note', 'This file is empty.'));
+  if (!text.trim()) article.append(el('p', 'mdw-note', 'This file is empty.'));
   highlightIn(article);
   typesetIn(article);
   return article;
@@ -455,9 +458,33 @@ function buildArticle(d) {
 
 /* ---------- showing documents ---------- */
 
-function showArticle(d) {
-  if (!d.article) d.article = buildArticle(d);
-  page.replaceChildren(d.article);
+// The document as it is now: rendered, or its source in the editor (Edit mode).
+function showDoc(d) {
+  host.classList.toggle('editing', d.editing);
+  if (d.editing) {
+    const ta = editorOf(d);
+    page.replaceChildren(ta);
+    ta.scrollTop = d.editScroll;
+  } else {
+    if (!d.article) d.article = buildArticle(d);
+    page.replaceChildren(d.article);
+  }
+}
+
+// Remembers where the document is scrolled before something else is shown.
+function leaveDoc(d) {
+  if (d.article && d.article.isConnected) d.scroll = host.scrollTop;
+  if (d.editor && d.editor.isConnected) {
+    d.editScroll = d.editor.scrollTop;
+    syncDraft(d);
+  }
+}
+
+// Keys go to the document: the editor in Edit mode, else the page (to scroll).
+function focusDoc() {
+  const d = current();
+  if (d && d.editing) d.editor.focus({ preventScroll: true });
+  else host.focus({ preventScroll: true });
 }
 
 function findAnchor(d, frag) {
@@ -478,21 +505,23 @@ function scrollToAnchor(d, frag) {
 
 function activateDoc(id, opts = {}) {
   const prev = current();
-  if (prev && prev.article && prev.article.isConnected) prev.scroll = host.scrollTop;
+  if (prev) leaveDoc(prev);
   activeId = id;
   const d = current();
+  if (d && opts.anchor) d.editing = false; // a link led here: show where it points (the draft stays)
   renderRail();
   renderBar();
   if (!d) {
     page.replaceChildren();
+    host.classList.remove('editing');
     host.hidden = true;
     emptyEl.hidden = false;
     return;
   }
   host.hidden = false;
   emptyEl.hidden = true;
-  showArticle(d);
-  host.scrollTop = d.scroll;
+  showDoc(d);
+  if (!d.editing) host.scrollTop = d.scroll;
   if (opts.anchor) scrollToAnchor(d, opts.anchor);
   if (d.handle) checkFresh(d);
 }
@@ -500,6 +529,9 @@ function activateDoc(id, opts = {}) {
 function closeDoc(id) {
   const i = docs.findIndex((d) => d.id === id);
   if (i < 0) return;
+  const d = docs[i];
+  if (d.editor) syncDraft(d);
+  if (d.dirty && !confirm(`${d.name} has unsaved changes. Close it and lose them?`)) return;
   docs.splice(i, 1);
   if (id === activeId) {
     const next = docs[i] || docs[i - 1] || null;
@@ -524,9 +556,13 @@ function renderRail() {
     const main = el('button', 'file-main');
     main.type = 'button';
     main.title = d.path || d.name;
-    main.append(el('span', 'file-name', d.name));
+    const name = el('span', 'file-name');
+    if (d.dirty) name.append(el('span', 'dirty-dot', '• '));
+    name.append(d.name);
+    main.append(name);
     const meta = metaOf(d);
     if (meta) main.append(el('span', 'file-meta', meta));
+    if (d.dirty) main.title += ' (unsaved changes)';
     if (d.id === activeId) {
       main.setAttribute('aria-current', 'page');
       activeButton = main;
@@ -534,7 +570,7 @@ function renderRail() {
     main.addEventListener('click', (e) => {
       activateDoc(d.id);
       if (narrow.matches) setRail(false);
-      if (e.detail) host.focus({ preventScroll: true }); // mouse: keys now scroll the document
+      if (e.detail) focusDoc(); // mouse: keys now go to the document
     });
     li.addEventListener('auxclick', (e) => {
       if (e.button !== 1) return;
@@ -554,12 +590,30 @@ function renderRail() {
   if (hadFocus && activeButton) activeButton.focus({ preventScroll: true });
 }
 
+const SAVE_LABEL = { inplace: 'Save', as: 'Save as…', download: 'Download' };
+
 function renderBar() {
   const d = current();
-  $('bar-name').textContent = d ? d.name : 'No file open';
+  const dot = d && d.dirty ? '• ' : '';
+  $('bar-name').textContent = d ? dot + d.name : 'No file open';
   $('bar-path').textContent = d ? dirName(d.path) : '';
   $('live').hidden = !(d && d.handle);
-  document.title = (d ? d.name + ' · ' : '') + 'md-whatever Reader';
+  document.title = (d ? dot + d.name + ' · ' : '') + 'md-whatever Reader';
+  const mode = $('mode');
+  mode.hidden = !d;
+  const save = $('save');
+  save.hidden = !(d && d.dirty);
+  if (d) {
+    mode.textContent = d.editing ? 'Read' : 'Edit';
+    mode.title = d.editing ? 'Back to reading (Esc)' : 'Edit the Markdown source (e)';
+    const kind = saveKind(d);
+    save.textContent = SAVE_LABEL[kind];
+    save.title = kind === 'inplace' ? `Save to ${d.name} (${MOD}S)`
+      : kind === 'as' ? `Save to a file you pick (${MOD}S)` : `Download a copy (${MOD}S)`;
+  }
+  const conflict = !!(d && d.conflict === 'shown');
+  $('conflict').hidden = !conflict;
+  if (conflict) $('conflict-text').textContent = `${d.name} changed on disk while you were editing it.`;
 }
 
 function setRail(open) {
@@ -569,27 +623,60 @@ function setRail(open) {
 
 /* ---------- live reload ---------- */
 
+// New contents from disk (r: from readText) become the document's.
+function adopt(d, r) {
+  const old = d.editor;
+  const refocus = !!old && root.activeElement === old;
+  d.text = r.text;
+  d.banner = r.banner;
+  d.encoding = r.encoding;
+  d.bom = r.bom;
+  d.base = null;
+  d.article = null;
+  d.conflict = null;
+  delete d.title;
+  if (old && d.draft !== baseOf(d)) {
+    // An editor's text is set only once (setting it again would wipe its undo
+    // history), so new text means a new editor, at the same place.
+    d.caret = old.selectionStart;
+    if (old.isConnected) d.editScroll = old.scrollTop;
+    d.editor = null;
+    d.draft = null;
+  }
+  d.dirty = false;
+  if (d.id === activeId) {
+    if (!d.editing) {
+      const keep = host.scrollTop; // keep your place, as the app does
+      showDoc(d);
+      host.scrollTop = keep;
+    } else if (d.editor !== old) {
+      showDoc(d);
+      if (refocus) d.editor.focus({ preventScroll: true });
+    }
+  }
+  renderRail();
+  renderBar();
+}
+
 async function refreshDoc(d, file) {
   if (!file) file = await d.handle.getFile();
   const r = await readText(file);
   d.mtime = file.lastModified;
   d.size = file.size;
   if (r.binary || (r.text === d.text && r.banner === d.banner)) return false;
-  d.text = r.text;
-  d.banner = r.banner;
-  d.article = null;
-  delete d.title;
-  if (d.id === activeId) {
-    const keep = host.scrollTop; // keep your place, as the app does
-    showArticle(d);
-    host.scrollTop = keep;
+  if (d.editor) syncDraft(d);
+  if (d.dirty && normalizeNewlines(r.text) !== d.draft) {
+    // Unsaved changes are never replaced. Say so, and let the reader choose.
+    d.conflict = 'shown';
+    renderBar();
+    return false;
   }
-  renderRail();
+  adopt(d, r);
   return true;
 }
 
 async function checkFresh(d) {
-  if (!d.handle || d.checking) return false;
+  if (!d.handle || d.checking || d.saving) return false;
   d.checking = true;
   try {
     const file = await d.handle.getFile();
@@ -607,6 +694,20 @@ setInterval(() => {
   if (d && d.handle && !document.hidden) checkFresh(d);
 }, 1000);
 
+// Back to what is on disk, dropping unsaved changes.
+async function reloadFromDisk(d) {
+  try {
+    const file = await d.handle.getFile();
+    const r = await readText(file);
+    if (r.binary) throw new Error('it is no longer a text file');
+    d.mtime = file.lastModified;
+    d.size = file.size;
+    adopt(d, r);
+  } catch (err) {
+    toast(`Could not read ${d.name}: ${(err && err.message) || err}`);
+  }
+}
+
 async function reloadCurrent() {
   const d = current();
   if (!d) return;
@@ -614,7 +715,225 @@ async function reloadCurrent() {
     toast(d.kind === 'file' ? 'This browser cannot re-read the file. Open it again to refresh it.' : 'Nothing to reload for ' + d.name + '.');
     return;
   }
+  if (d.editor) syncDraft(d);
+  if (d.dirty) {
+    if (confirm(`Discard your changes to ${d.name} and reload it from disk?`)) await reloadFromDisk(d);
+    return;
+  }
   toast((await checkFresh(d)) ? 'Reloaded ' + d.name : d.name + ' is up to date');
+}
+
+/* ---------- editing ---------- */
+
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+';
+const MD_TYPES = [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown', '.mdown', '.mkd', '.mkdn', '.mdwn'] } }];
+let saveNoteShown = false;
+
+// The file's text as the editor holds it (LF only): what "no changes" means.
+const baseOf = (d) => (d.base != null ? d.base : (d.base = normalizeNewlines(d.text)));
+
+// How Save works for a document: 'inplace' (Chromium: a file it may write to),
+// 'as' (Chromium: to a file the reader picks), 'download' (Safari, Firefox).
+function saveKind(d) {
+  if (d.kind === 'file' && d.handle && 'createWritable' in d.handle) return 'inplace';
+  return window.showSaveFilePicker ? 'as' : 'download';
+}
+
+function editorOf(d) {
+  if (!d.editor) {
+    const ta = document.createElement('textarea');
+    ta.className = 'mdw-editor';
+    ta.spellcheck = false;
+    for (const [k, v] of [['autocapitalize', 'off'], ['autocomplete', 'off'], ['autocorrect', 'off'], ['aria-label', 'Markdown source']])
+      ta.setAttribute(k, v);
+    ta.value = sourceOf(d); // the only time .value is set: setting it wipes the undo history
+    if (d.caret != null) ta.setSelectionRange(d.caret, d.caret);
+    d.caret = null;
+    ta.addEventListener('input', () => noteEdit(d));
+    ta.addEventListener('keydown', (e) => editorKey(e, d));
+    d.editor = ta;
+  }
+  return d.editor;
+}
+
+// Reading the editor's text costs a copy of it, so typing fast reads it at most
+// every 150 ms. The first change shows the unsaved dot at once.
+function noteEdit(d) {
+  d.article = null; // Read renders the draft
+  clearTimeout(d.syncTimer);
+  if (d.dirty) d.syncTimer = setTimeout(() => syncDraft(d), 150);
+  else syncDraft(d);
+}
+
+function syncDraft(d) {
+  clearTimeout(d.syncTimer);
+  if (!d.editor) return;
+  const draft = d.editor.value;
+  if (draft === d.draft) return;
+  d.draft = draft;
+  delete d.title;
+  const dirty = draft !== baseOf(d);
+  if (dirty !== d.dirty) {
+    d.dirty = dirty;
+    renderRail();
+    renderBar();
+  }
+}
+
+function editorKey(e, d) {
+  if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Escape' && !e.shiftKey) {
+    e.preventDefault();
+    setEditing(d, false);
+  } else if (e.key === 'Tab' && !e.shiftKey) {
+    // Two spaces. Shift+Tab still moves focus on, and Esc goes back to reading,
+    // so the keyboard is never stuck in here.
+    e.preventDefault();
+    const ta = e.target;
+    if (!document.execCommand('insertText', false, '  ')) { // execCommand keeps undo working
+      ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end');
+      noteEdit(d);
+    }
+  }
+}
+
+const scrollRatio = (node) => {
+  const room = node.scrollHeight - node.clientHeight;
+  return room > 0 ? node.scrollTop / room : 0;
+};
+const scrollToRatio = (node, ratio) => { node.scrollTop = ratio * (node.scrollHeight - node.clientHeight); };
+
+// Read <-> Edit for the current document. Scrolling carries over by ratio,
+// which is close but not exact (rendered and source heights differ).
+function setEditing(d, on) {
+  if (!d || d.id !== activeId) return;
+  if (d.editing === on) {
+    if (on) d.editor.focus({ preventScroll: true });
+    return;
+  }
+  if (on) {
+    const ratio = scrollRatio(host);
+    const sameSpot = d.readTop != null && Math.abs(host.scrollTop - d.readTop) < 4;
+    d.scroll = host.scrollTop;
+    d.editing = true;
+    showDoc(d);
+    const ta = d.editor;
+    if (!sameSpot) { // back where it was left otherwise
+      const text = ta.value;
+      const at = text.lastIndexOf('\n', Math.round(ratio * text.length) - 1) + 1; // start of a line
+      ta.setSelectionRange(at, at);
+      scrollToRatio(ta, ratio);
+    }
+    ta.focus({ preventScroll: true });
+    if (!saveNoteShown && d.kind === 'file' && saveKind(d) === 'download') {
+      saveNoteShown = true;
+      toast("This browser can't save to the original file. Save downloads a copy. Chrome, Edge, Arc or Brave can save in place.", 9000);
+    }
+  } else {
+    syncDraft(d);
+    const ratio = scrollRatio(d.editor);
+    d.editScroll = d.editor.scrollTop;
+    d.editing = false;
+    showDoc(d);
+    scrollToRatio(host, ratio);
+    d.readTop = host.scrollTop;
+    host.focus({ preventScroll: true });
+  }
+  renderBar();
+}
+
+async function writeTo(handle, blob) {
+  const w = await handle.createWritable(); // written to a temporary file, swapped in on close
+  try {
+    await w.write(blob);
+    await w.close();
+  } catch (err) {
+    await w.abort().catch(() => {});
+    throw err;
+  }
+}
+
+function download(blob, name) {
+  const a = el('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60e3);
+}
+
+// Saves the document: in place, to a picked file (as, or nowhere to write it
+// back to), or as a download. Unchanged text is written back exactly as it was
+// read; edited text keeps the file's line endings, BOM and encoding.
+async function save(d, { as = false } = {}) {
+  if (!d || d.saving) return false;
+  if (d.editor) syncDraft(d);
+  const kind = as ? (window.showSaveFilePicker ? 'as' : 'download') : saveKind(d);
+  if (kind === 'inplace' && !d.dirty) {
+    toast('No changes to save.');
+    return false;
+  }
+  const edited = d.draft != null && d.draft !== baseOf(d);
+  const text = edited ? withLineEnding(d.draft, lineEnding(d.text)) : d.text;
+  let encoding = d.encoding;
+  let out = encodeText(text, d);
+  if (out.unencodable) {
+    if (!confirm(`${d.name} is saved as Latin-1, which has no "${out.unencodable}".\n\nSave it as UTF-8 instead? That changes the file's encoding.`)) return false;
+    encoding = 'utf-8';
+    out = encodeText(text, { encoding });
+  }
+  const blob = new Blob([out.bytes], { type: 'text/markdown' });
+  d.saving = true; // the live-reload check leaves the file alone meanwhile
+  try {
+    if (kind === 'inplace') {
+      if (d.conflict && !confirm(`${d.name} changed on disk since you started editing it. Replace it with your version?`)) return false;
+      // Opening asked only to read. Writing is asked for on the first save.
+      let state = await d.handle.queryPermission({ mode: 'readwrite' });
+      if (state !== 'granted') state = await d.handle.requestPermission({ mode: 'readwrite' });
+      if (state !== 'granted') {
+        toast(`Not saved: the browser was not allowed to write to ${d.name}.`);
+        return false;
+      }
+      await writeTo(d.handle, blob);
+    } else if (kind === 'as') {
+      let handle;
+      try {
+        handle = await window.showSaveFilePicker({ suggestedName: d.name, types: MD_TYPES });
+      } catch (err) {
+        if (err && err.name === 'AbortError') return false;
+        throw err;
+      }
+      await writeTo(handle, blob);
+      // From now on the document is that file: saved in place, and watched.
+      Object.assign(d, { kind: 'file', handle, name: handle.name, path: handle.name });
+      recent.add(handle);
+    } else {
+      download(blob, d.name);
+    }
+    if (kind !== 'download') {
+      const file = await d.handle.getFile();
+      d.mtime = file.lastModified; // so live reload doesn't take our own save for a change
+      d.size = file.size;
+    }
+    if (encoding !== d.encoding) {
+      Object.assign(d, { encoding, bom: false, banner: '', article: null });
+    }
+    d.text = text;
+    d.base = null;
+    d.conflict = null;
+    d.dirty = false;
+    if (d.editor) syncDraft(d); // typing during the save leaves it dirty again
+    renderRail();
+    renderBar();
+    toast(kind === 'download' ? `Downloaded ${d.name}. The original file is unchanged.` : `Saved ${d.name}.`);
+    return true;
+  } catch (err) {
+    toast(`Could not save ${d.name}: ${(err && err.message) || err}`);
+    return false;
+  } finally {
+    d.saving = false;
+  }
 }
 
 /* ---------- opening files ---------- */
@@ -683,19 +1002,19 @@ async function intake(entries, { explicit = true, from = '' } = {}) {
       continue;
     }
     fresh.push(makeDoc({
-      name, path: entry.path, text: r.text, banner: r.banner,
+      name, path: entry.path, text: r.text, banner: r.banner, encoding: r.encoding, bom: r.bom,
       handle: entry.handle || null, mtime: file.lastModified, size: file.size,
     }));
   }
 
   if (images) for (const d of docs) if (d.kind !== 'sample') d.article = null; // their images may resolve now
   if (fresh.length) {
-    docs = docs.filter((d) => d.kind !== 'sample'); // the samples make way for real files
+    docs = docs.filter((d) => d.kind !== 'sample' || d.dirty); // the samples make way for real files (unless edited)
     docs.push(...fresh);
   }
   const target = focus || fresh[0];
   if (target) activateDoc(target.id);
-  else if (images && current()) showArticle(current());
+  else if (images && current() && !current().editing) showDoc(current());
 
   const parts = [];
   if (fresh.length > 1 || from) parts.push(`Opened ${fresh.length} Markdown file${fresh.length === 1 ? '' : 's'}${from ? ' from ' + from : ''}`);
@@ -708,7 +1027,7 @@ async function intake(entries, { explicit = true, from = '' } = {}) {
 
 function openText(text) {
   const d = makeDoc({ name: `pasted-${++pasteCount}.md`, kind: 'paste', text });
-  docs = docs.filter((x) => x.kind !== 'sample');
+  docs = docs.filter((x) => x.kind !== 'sample' || x.dirty);
   docs.push(d);
   activateDoc(d.id);
 }
@@ -1067,14 +1386,29 @@ function bind() {
     savePrefs();
     for (const d of docs) d.article = null;
     const d = current();
-    if (d) {
+    if (d && !d.editing) {
       const keep = host.scrollTop;
-      showArticle(d);
+      showDoc(d);
       host.scrollTop = keep;
     }
   });
 
   for (const id of ['open-files', 'empty-open-files']) $(id).addEventListener('click', pickFiles);
+  $('mode').addEventListener('click', () => { const d = current(); if (d) setEditing(d, !d.editing); });
+  $('save').addEventListener('click', () => save(current()));
+  $('conflict-reload').addEventListener('click', () => { const d = current(); if (d) reloadFromDisk(d); });
+  $('conflict-keep').addEventListener('click', () => {
+    const d = current();
+    if (d) d.conflict = 'kept'; // saving will still ask before replacing the file
+    renderBar();
+  });
+  // Closing the tab or app with unsaved changes: the browser asks first.
+  window.addEventListener('beforeunload', (e) => {
+    for (const d of docs) if (d.editor) syncDraft(d);
+    if (!docs.some((d) => d.dirty)) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
   $('recent-clear').addEventListener('click', () => recent.clear());
   for (const id of ['open-folder', 'empty-open-folder']) $(id).addEventListener('click', pickFolder);
   for (const id of ['show-welcome', 'empty-welcome']) $(id).addEventListener('click', () => {
@@ -1133,9 +1467,10 @@ function bind() {
   });
 
   // drag and drop anywhere
+  // Text dragged onto the editor goes into it, as in any text field.
   const carriesContent = (e) => {
     const types = e.dataTransfer ? [...e.dataTransfer.types] : [];
-    return types.includes('Files') || types.includes('text/plain');
+    return types.includes('Files') || (types.includes('text/plain') && !isTyping(e.composedPath()[0]));
   };
   window.addEventListener('dragenter', (e) => {
     if (!carriesContent(e)) return;
@@ -1153,12 +1488,13 @@ function bind() {
     if (!dragDepth) document.body.classList.remove('is-dragging');
   });
   window.addEventListener('drop', (e) => {
+    if (!carriesContent(e)) return;
     onDrop(e).catch((err) => toast('Could not open what was dropped: ' + ((err && err.message) || err)));
   });
 
   // paste Markdown text (the app's `md-whatever -`)
   document.addEventListener('paste', (e) => {
-    if (isTyping(e.target) || !e.clipboardData) return;
+    if (isTyping(e.composedPath()[0]) || !e.clipboardData) return;
     const files = [...e.clipboardData.files];
     if (files.length) {
       e.preventDefault();
@@ -1171,16 +1507,26 @@ function bind() {
     openText(text);
   });
 
+  // Cmd/Ctrl+S saves (instead of the browser's "Save Page As"), Shift as well: save as.
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key || '').toLowerCase() !== 's') return;
+    e.preventDefault();
+    if (current()) save(current(), { as: e.shiftKey });
+  });
+
   // keys, after the app's own
   document.addEventListener('keydown', (e) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTyping(e.composedPath()[0])) return;
     const line = 48;
+    const d = current();
+    const scroller = d && d.editing ? d.editor : host;
     switch (e.key) {
-      case 'j': host.scrollBy(0, line); break;
-      case 'k': host.scrollBy(0, -line); break;
-      case 'g': host.scrollTop = 0; break;
-      case 'G': host.scrollTop = host.scrollHeight; break;
+      case 'j': scroller.scrollBy(0, line); break;
+      case 'k': scroller.scrollBy(0, -line); break;
+      case 'g': scroller.scrollTop = 0; break;
+      case 'G': scroller.scrollTop = scroller.scrollHeight; break;
+      case 'e': setEditing(d, true); break;
       case '[': step(-1); break;
       case ']': step(1); break;
       case '+': case '=': setZoom(prefs.zoom + 0.1); break;

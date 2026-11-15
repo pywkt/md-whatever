@@ -33,8 +33,21 @@ At [pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/) you can i
 | `+` / `-` / `0` | zoom in / out / reset |
 | `r` | reload the current file from disk |
 | `o` | open files |
+| `e` / `Esc` | edit the source / back to reading |
+| `⌘S` / `Ctrl+S` | save |
 
 Click a row in the sidebar to switch files. The × on a row closes it, and so does a middle click.
+
+## Edit
+
+Press **Edit** in the top bar, or `e`, to change a file's Markdown source. **Read** or `Esc` shows the result. A dot before a file's name means it has unsaved changes.
+
+What **Save** does depends on the browser:
+
+- **Chrome, Edge, Brave, Arc:** saves to the file you opened. The first save of each file asks for permission to write to it. `⌘⇧S` / `Ctrl+Shift+S` saves to a new file instead.
+- **Safari, Firefox:** these browsers can't write to your files, so Save downloads a copy, and the original file stays as it was.
+
+Saving keeps the file's line endings, encoding and byte order mark. If the file changes on disk while you have unsaved changes, you choose which version to keep. Samples like this page can be edited too, and saving one makes a new file.
 
 ## What carries over from the desktop app
 

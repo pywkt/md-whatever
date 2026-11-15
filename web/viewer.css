@@ -25,6 +25,32 @@ svg.math { display: inline-block; overflow: visible; }
 .mdw-note { color: var(--muted); }
 a:not([href]) { color: inherit; text-decoration: none; }
 
+/* Edit mode: the source in a textarea that fills the view and scrolls by itself,
+   in the theme's colors and mono font, scaled by zoom like the text. */
+:host(.editing) { overflow: hidden; }
+:host(.editing) .mdw-page { height: 100%; }
+.mdw-editor {
+  box-sizing: border-box; /* the page's own rule for this stops at the shadow root */
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 1.6em max(1.2em, calc((100% - 82ch) / 2)) 30vh;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
+  caret-color: var(--accent);
+  font-family: var(--mono-font), monospace;
+  font-size: calc(var(--base-size) * 0.92);
+  line-height: 1.6;
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /*--B--*/
 /* Breeze Light / Breeze Dark, the app's default code themes. */
 :host {

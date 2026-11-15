@@ -308,3 +308,20 @@ button, select, input { font: inherit; color: inherit; }
 .toast.update { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; }
 .toast.update .btn { flex: none; min-height: 26px; color: var(--ui-text); }
 .toast.update .icon-btn { flex: none; color: inherit; }
+
+/* ---- editing ---- */
+.bar-btn { flex: none; min-height: 28px; padding: 2px 12px; }
+.save-btn { border-color: var(--ui-accent); font-weight: 600; }
+.dirty-dot { color: var(--ui-accent); font-weight: 700; }
+.notice {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px max(10px, env(safe-area-inset-right, 0px)) 6px max(12px, env(safe-area-inset-left, 0px));
+  background: var(--ui-select);
+  border-bottom: 1px solid var(--ui-accent);
+}
+.notice span { flex: 1 1 16em; }
+.notice .btn { flex: none; min-height: 26px; }

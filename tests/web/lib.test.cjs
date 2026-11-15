@@ -68,3 +68,65 @@ test('document titles for the sidebar', () => {
   assert.equal(lib.titleOf('no heading here'), '');
   assert.equal(lib.titleOf('    # indented code, not a heading\n'), '');
 });
+
+/* ---------- saving gives back the bytes that were read ---------- */
+
+const fs = require('node:fs');
+const path = require('node:path');
+const fixture = (name) => new Uint8Array(fs.readFileSync(path.join(__dirname, '..', 'fixtures', name)));
+
+// What the editor does on an untouched save: decode, textarea-normalize, put the
+// line ending back, encode.
+function roundTrip(bytes) {
+  const r = lib.decodeBytes(bytes);
+  const text = lib.withLineEnding(lib.normalizeNewlines(r.text), lib.lineEnding(r.text));
+  return lib.encodeText(text, r).bytes;
+}
+
+test('files come back byte for byte: fixtures', () => {
+  for (const name of ['crlf.md', 'not-utf8.md', 'kitchen-sink.md', 'math.md', 'empty.md', 'pathological.md']) {
+    const bytes = fixture(name);
+    assert.deepEqual(roundTrip(bytes), bytes, name);
+  }
+  const crlf = lib.decodeBytes(fixture('crlf.md'));
+  assert.equal(crlf.encoding, 'utf-8');
+  assert.equal(lib.lineEnding(crlf.text), '\r\n');
+  assert.ok(!crlf.text.endsWith('\n'), 'crlf.md has no final newline, and keeps none');
+  assert.equal(lib.decodeBytes(fixture('not-utf8.md')).encoding, 'latin1');
+});
+
+test('files come back byte for byte: BOM, CR only, no final newline', () => {
+  const enc = (s) => new TextEncoder().encode(s);
+  const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...enc('# Title\r\n\r\nbody')]);
+  const r = lib.decodeBytes(withBom);
+  assert.equal(r.bom, true);
+  assert.equal(r.text, '# Title\r\n\r\nbody', 'the BOM is not part of the text');
+  assert.deepEqual(roundTrip(withBom), withBom);
+  assert.deepEqual(roundTrip(enc('a\nb')), enc('a\nb'));
+  assert.deepEqual(roundTrip(enc('a\n\n\n')), enc('a\n\n\n'));
+  assert.deepEqual(roundTrip(enc('')), enc(''));
+});
+
+test('edited text gets the file line ending back', () => {
+  assert.equal(lib.lineEnding('a\r\nb\r\nc\n'), '\r\n', 'mostly CRLF');
+  assert.equal(lib.lineEnding('a\r\nb\nc\n'), '\n', 'mostly LF');
+  assert.equal(lib.lineEnding('no newline'), '\n');
+  assert.equal(lib.normalizeNewlines('a\r\nb\rc\n'), 'a\nb\nc\n');
+  assert.equal(lib.withLineEnding('a\nb\n', '\r\n'), 'a\r\nb\r\n');
+  assert.equal(lib.withLineEnding('a\r\nb\n', '\n'), 'a\nb\n');
+});
+
+test('Latin-1 (as browsers read it: windows-1252) round-trips every byte', () => {
+  const all = new Uint8Array(255).map((_, i) => i + 1); // NUL would mean binary
+  const r = lib.decodeBytes(new Uint8Array([0xff, 0xfe, ...all])); // not valid UTF-8
+  assert.equal(r.encoding, 'latin1');
+  assert.equal(r.text[0x80 + 2 - 1], '€', '0x80 reads as the euro sign');
+  assert.deepEqual(lib.encodeText(r.text, r).bytes, new Uint8Array([0xff, 0xfe, ...all]));
+  assert.deepEqual(lib.encodeText('café €', { encoding: 'latin1' }).bytes, new Uint8Array([0x63, 0x61, 0x66, 0xe9, 0x20, 0x80]));
+  assert.deepEqual(lib.encodeText('a → b', { encoding: 'latin1' }), { unencodable: '→' });
+  assert.deepEqual(lib.encodeText('a \u{1f600}', { encoding: 'latin1' }), { unencodable: '\u{1f600}' });
+});
+
+test('binary files are refused', () => {
+  assert.deepEqual(lib.decodeBytes(new Uint8Array([0x23, 0, 0x41])), { binary: true });
+});

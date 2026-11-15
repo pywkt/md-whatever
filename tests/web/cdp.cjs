@@ -1,9 +1,10 @@
-// Headless Chromium driven over the DevTools protocol, shared by smoke.cjs and
-// site.cjs. Chromium: $MDW_CHROMIUM, or chromium / google-chrome-stable on PATH;
+// Headless Chromium driven over the DevTools protocol, and a static file
+// server, shared by the browser tests (smoke, site, edit). Chromium: $MDW_CHROMIUM, or chromium / google-chrome-stable on PATH;
 // without one, scripts exit 77 (ctest's SKIP_RETURN_CODE).
 'use strict';
 const { spawn, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -111,7 +112,29 @@ async function launch({ offline = false } = {}) {
   }
 }
 
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json',
+  '.png': 'image/png', '.svg': 'image/svg+xml' };
+
+// A static server like GitHub Pages, for one directory, on 127.0.0.1 (a secure
+// context, unlike file://). Pass the port of an earlier server to keep the page's
+// origin, and with it its storage.
+function serve(dir, port = 0) {
+  const server = http.createServer((req, res) => {
+    let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (rel.endsWith('/')) rel += 'index.html';
+    const file = path.join(dir, path.normalize(rel));
+    if (!file.startsWith(dir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      res.writeHead(404).end('not found');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'max-age=600' });
+    res.end(fs.readFileSync(file));
+  });
+  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
+}
+const stop = (server) => new Promise((r) => { server.closeAllConnections(); server.close(r); });
+
 // Runs in the page: waits up to ms for fn() to return something truthy.
 const PAGE_WAIT = 'const wait = async (fn, ms) => { for (let t = 0; t < ms; t += 50) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } return null; };';
 
-module.exports = { launch, sleep, PAGE_WAIT };
+module.exports = { launch, serve, stop, sleep, PAGE_WAIT };

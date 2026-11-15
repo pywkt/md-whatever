@@ -21,6 +21,10 @@ or don't. Whatever.
 md-whatever notes.md
 ```
 
+Not on Linux? The same engine and themes also run in a browser tab:
+**[pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/)**. See
+[The web reader](#the-web-reader).
+
 ---
 
 ## What it does
@@ -100,6 +104,8 @@ saves you some time.
 **On purpose. These aren't coming:**
 
 - **Editing.** It's a reader. Use your editor; md-whatever reloads when you save.
+  (The [web reader](#the-web-reader) can edit, since a browser tab has no
+  editor next to it.)
 - **A web engine or JavaScript.** That's the whole point. Pages are drawn by
   [litehtml](https://github.com/litehtml/litehtml), a small HTML/CSS renderer.
 - **Network access.** It never fetches anything. **Images from the web aren't
@@ -109,7 +115,8 @@ saves you some time.
   literal text, not rendered. Safer, and simpler.
 - **Mermaid diagrams, charts and other "render this code block as a picture"
   extensions.** They'd need JavaScript.
-- **Windows or macOS.** It's a Linux app.
+- **A Windows or macOS app.** It's a Linux app. On other systems, use the
+  [web reader](#the-web-reader).
 
 **Not supported (at least for now):**
 
@@ -120,7 +127,8 @@ saves you some time.
 - **Other Markdown extensions:** `==highlight==`, `H~2~O` / `x^2^`,
   definition lists, `[[wiki links]]`, tables of contents, `\(…\)` / `\[…\]` math
   (use `$…$` and `$$…$$`).
-- **Tabs, a sidebar, a file browser** or searching across files.
+- **Tabs, a sidebar, a file browser** or searching across files. (The web
+  reader has a sidebar.)
 - **Wide tables** can't scroll on their own; a table wider than the text column
   makes the whole page scroll sideways.
 - **Broken images** show nothing (not even their alt text).
@@ -231,6 +239,79 @@ lines itself when you use the menu, and leaves the rest of the file alone.
 
 ---
 
+## The web reader
+
+The same Markdown engine, compiled to WebAssembly, in a single HTML page,
+styled by the same theme files. It's for macOS, Windows, or anywhere else the
+desktop app doesn't run. Two ways to get it:
+
+- **Hosted:** [pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/).
+  You can install it as an app, and it then works offline.
+- **One file:** `md-whatever.html`, attached to each tagged
+  [release](https://github.com/pywkt/md-whatever/releases), or built by you (see
+  [Building by hand](#building-by-hand)). Save it anywhere and open it in a
+  browser. It needs no server and no install.
+
+What you get:
+
+- **Many files in one tab.** Every open file gets a row in the sidebar. Open
+  files or a whole folder with the buttons or `o`, drop them onto the page, or
+  paste Markdown text. When you open a folder, relative images and links between
+  its files work.
+- **Everything the app renders:** tables, task lists, footnotes, front matter,
+  math (MathJax, with the app's settings), and every theme in light and dark,
+  picked in the sidebar.
+- **Editing.** `e` or **Edit** shows the Markdown source, and `Esc` or **Read**
+  shows the result. A dot marks unsaved changes. Saving keeps the file's line
+  endings, encoding and byte order mark, so saving a file you didn't change
+  gives back the same bytes. If the file changes on disk while you have unsaved
+  changes, you choose which version to keep.
+- **Live reload**, and **Recent** files in the sidebar, in the browsers that
+  allow it (below).
+
+What works depends on the browser, because browsers differ in what they let a
+page do with your files:
+
+| | Chrome, Edge, Brave | Arc | Safari | Firefox |
+|---|---|---|---|---|
+| Read files, folders, themes, math | yes | yes | yes | yes |
+| **Save** (`⌘S` / `Ctrl+S`) | to the original file | to the original file | downloads a copy | downloads a copy |
+| Save as a new file (`⌘⇧S` / `Ctrl+Shift+S`) | yes | yes | downloads a copy | downloads a copy |
+| Live reload | yes | yes | no: open the file again | no: open the file again |
+| Recent files | yes | yes | no | no |
+| Install as an app | install button in the address bar | no | **File → Add to Dock** (macOS Sonoma or later) | no |
+| Open `.md` files from Finder / Explorer | yes, once installed (**Open With**) | no | no: drop files on the window | no |
+
+The first save of each file in Chrome, Edge, Brave or Arc asks for permission to
+write to it.
+
+Keys are the app's (`j`/`k`, `Space`, `g`/`G`, `r`) plus `[` / `]` for the
+previous / next open file, `+` / `-` / `0` for zoom, `o` to open files, `e` /
+`Esc` to edit / read, and `⌘S` / `Ctrl+S` to save.
+
+**What it sends over the network.** Your files never leave your computer. They
+are read and rendered inside the page and uploaded nowhere. The page does fetch
+some things:
+
+- the hosted page itself, from GitHub Pages;
+- [highlight.js](https://highlightjs.org/) (code colors) from cdnjs and MathJax
+  (math) from jsDelivr, only when a document has code or math. The hosted
+  page keeps them for offline use once fetched. Without them, code is plain and math
+  shows as TeX source, as in the app without MathJax;
+- images from the web, only if you turn on **Load images from the web** in the
+  sidebar. They're off by default.
+
+Your settings (theme, appearance, zoom, sidebar width) and the Recent list are kept in your
+browser's storage for this page, nowhere else.
+
+**How it differs from the app:** code colors come from highlight.js with Breeze
+colors, because KDE's syntax-highlighting library needs Qt. Raw HTML stays
+literal text, as in the app. Browsers that block WebAssembly get a plain
+JavaScript translation of the same engine, which renders identically but more
+slowly.
+
+---
+
 ## Themes
 
 Everything about how documents look is CSS. Files reload live when you save
@@ -320,7 +401,9 @@ installed (`sudo pacman -S nodejs mathjax` on Arch).
 ## Building by hand
 
 For hacking on it. Needs (Arch): `qt6-base qt6-svg litehtml md4c
-syntax-highlighting cmake ninja`, plus `nodejs mathjax` for math.
+syntax-highlighting cmake ninja`, plus `nodejs mathjax` for math. The web
+reader also needs `clang lld wasi-libc wasi-libc++ wasi-libc++abi
+wasi-compiler-rt binaryen python`, and `chromium` for its browser tests.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/.local
@@ -333,12 +416,26 @@ cmake --build build --target set-default     # make md-whatever open .md files
 Undo: `cmake --build build --target restore-default` puts Okular back as the
 default; `cmake --build build --target uninstall` removes the installed files.
 
+The web reader is built along with the app whenever its tools are installed,
+into `build/web/md-whatever.html` (the single-file page) and `build/web/site/`
+(the hosted version: the page plus a manifest, service worker and icons).
+`-DMDW_WEB_READER=OFF` skips it, `ON` makes missing tools an error, and
+`-DMDW_DESKTOP=OFF` builds only the web reader, without Qt. Its browser tests
+run in headless Chromium with the network blocked, and are skipped if Chromium
+isn't found (`MDW_CHROMIUM=/path/to/chromium` points them at one). To try the
+hosted version locally, serve the site folder, for example with
+`python3 -m http.server -d build/web/site`. The built page is published, never
+committed: [`.github/workflows/web.yml`](.github/workflows/web.yml) deploys it
+to GitHub Pages from `main` and attaches it to releases.
+
 Layout: `src/markdown.cpp` turns Markdown into HTML (plain C++, no Qt),
 `src/document.cpp` assembles the page, `src/math.cpp` talks to the MathJax
 helper (`data/mathjax-helper.cjs`), `src/theme.cpp` handles themes and
 settings, and `src/mainwindow.cpp` is the window. `third_party/qlitehtml` is a
 vendored copy of the Qt widget for litehtml, with a few local fixes listed in
-its `UPSTREAM_COMMIT`.
+its `UPSTREAM_COMMIT`. `web/` is the web reader: `engine.cpp` wraps
+`src/markdown.cpp` for WebAssembly, `reader.js` and `lib.js` are the page, and
+`build.py` assembles it all into one file. Its tests are in `tests/web/`.
 
 Developer aids (environment variables):
 
@@ -361,7 +458,9 @@ md-whatever is mostly glue. The hard parts are other people's work:
 [KSyntaxHighlighting](https://invent.kde.org/frameworks/syntax-highlighting)
 colors the code, [MathJax](https://www.mathjax.org/) and the New Computer
 Modern fonts typeset the math, and [Qt](https://www.qt.io/) does everything
-else.
+else. In the web reader, [highlight.js](https://highlightjs.org/) colors the
+code, and [wasi-libc](https://github.com/WebAssembly/wasi-libc) and LLVM's
+libc++ are compiled into the engine.
 
 ## License
 
@@ -374,3 +473,8 @@ by GPL-3.0 as a whole. In practice: use it and change it freely; if you hand
 out a built copy, the GPL's "share the source" terms apply. The other libraries
 are permissive: litehtml (BSD-3-Clause), md4c (MIT), KSyntaxHighlighting
 (MIT), MathJax and its fonts (Apache-2.0).
+
+The web reader doesn't contain qlitehtml, so the GPL doesn't apply to it: it's
+md-whatever and md4c (MIT), with parts of wasi-libc (MIT) and libc++ (Apache-2.0
+with the LLVM exception) linked in. highlight.js (BSD-3-Clause) and MathJax
+(Apache-2.0) are loaded from a CDN, not bundled.

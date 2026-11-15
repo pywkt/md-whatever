@@ -94,11 +94,18 @@
       </button>
       <div class="bar-title"><span class="bar-name" id="bar-name"></span><span class="bar-path" id="bar-path"></span></div>
       <span class="live" id="live" title="This file is watched. Save it in your editor and the page updates." hidden>Live</span>
+      <button class="btn bar-btn save-btn" id="save" type="button" hidden>Save</button>
+      <button class="btn bar-btn" id="mode" type="button" hidden>Edit</button>
       <div class="zoom" role="group" aria-label="Text size">
         <button class="icon-btn" id="zoom-out" type="button" aria-label="Smaller text" title="Smaller text (-)">−</button>
         <output id="zoom-value" for="zoom-out zoom-in">100%</output>
         <button class="icon-btn" id="zoom-in" type="button" aria-label="Larger text" title="Larger text (+)">+</button>
       </div>
+    </div>
+    <div class="notice" id="conflict" role="alert" hidden>
+      <span id="conflict-text"></span>
+      <button class="btn" id="conflict-reload" type="button" title="Show the file as it is on disk. Your changes are dropped.">Reload from disk</button>
+      <button class="btn" id="conflict-keep" type="button" title="Keep editing. Saving will ask before replacing the file.">Keep my edits</button>
     </div>
     <div id="viewer" tabindex="-1"></div>
     <div class="empty" id="empty" hidden>

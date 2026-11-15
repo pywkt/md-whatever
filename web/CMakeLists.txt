@@ -183,4 +183,7 @@ if(MDW_NODE)
   # The hosted version on a local server: install, offline, Recent, launches.
   add_test(NAME web-site COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/site.cjs ${_o}/site)
   set_tests_properties(web-site PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  # Editing: modes, saving in place byte for byte, conflicts, downloads.
+  add_test(NAME web-edit COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/edit.cjs ${_o}/md-whatever.html)
+  set_tests_properties(web-edit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
 endif()

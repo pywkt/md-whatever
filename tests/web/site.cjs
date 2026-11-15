@@ -13,10 +13,9 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { launch, sleep, PAGE_WAIT } = require('./cdp.cjs');
+const { launch, serve, stop, sleep, PAGE_WAIT } = require('./cdp.cjs');
 
 const args = process.argv.slice(2);
 const siteArg = args.find((a) => !a.startsWith('--'));
@@ -25,27 +24,6 @@ if (!siteArg) {
   console.error('usage: site.cjs SITE_DIR [--online]');
   process.exit(2);
 }
-
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json',
-  '.png': 'image/png', '.svg': 'image/svg+xml' };
-
-// A static server like GitHub Pages, for one directory; the port stays the same
-// across restarts, so the page keeps its origin (and its storage).
-function serve(dir, port = 0) {
-  const server = http.createServer((req, res) => {
-    let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (rel.endsWith('/')) rel += 'index.html';
-    const file = path.join(dir, path.normalize(rel));
-    if (!file.startsWith(dir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      res.writeHead(404).end('not found');
-      return;
-    }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'max-age=600' });
-    res.end(fs.readFileSync(file));
-  });
-  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
-}
-const stop = (server) => new Promise((r) => { server.closeAllConnections(); server.close(r); });
 
 // The page's state, as the tests need it.
 const STATE = `(() => {
