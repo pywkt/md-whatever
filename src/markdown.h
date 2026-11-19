@@ -15,6 +15,12 @@ struct RenderHooks {
     std::function<std::string(std::string_view lang, std::string_view code)> code;
     // Return HTML for a math expression. If unset, the TeX is shown as code.
     std::function<std::string(std::string_view tex, bool display)> math;
+    // Web reader only (its formatting toolbar): say where rendered text came
+    // from in the input. Text runs become <span data-s="OFFSET">, entities and
+    // backslash escapes also get data-n="SOURCE LENGTH", and code blocks and
+    // math get data-s/data-e around their content. Offsets count UTF-16 code
+    // units. Off by default: the desktop app's HTML stays as it is.
+    bool sourceMap = false;
 };
 
 // Renders body HTML only (no <html>/<head>). Raw HTML in the input is escaped,

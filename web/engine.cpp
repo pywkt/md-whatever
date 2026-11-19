@@ -51,9 +51,10 @@ std::string_view trimmed(std::string_view s)
 
 } // namespace
 
-std::string render(std::string_view markdown)
+std::string render(std::string_view markdown, bool sourceMap)
 {
     RenderHooks hooks;
+    hooks.sourceMap = sourceMap;
     hooks.code = [](std::string_view langView, std::string_view code) {
         const std::string_view lang = trimmed(langView);
         std::string out = "<pre class=\"code\"";
@@ -80,8 +81,8 @@ std::string slug(std::string_view text)
 
 #if defined(__wasm__)
 // --- WebAssembly exports ------------------------------------------------------
-// The page copies UTF-8 input into memory from mdw_alloc(), calls mdw_render or
-// mdw_slugify, then reads mdw_result_len() bytes at mdw_result_ptr(). The result
+// The page copies UTF-8 input into memory from mdw_alloc(), calls mdw_render,
+// mdw_render_mapped or mdw_slugify, then reads mdw_result_len() bytes at mdw_result_ptr(). The result
 // stays valid until the next call.
 namespace {
 std::string g_result;
@@ -92,6 +93,7 @@ std::string g_result;
 MDW_EXPORT(mdw_alloc) void *mdw_alloc(size_t n) { return std::malloc(n ? n : 1); }
 MDW_EXPORT(mdw_free) void mdw_free(void *p) { std::free(p); }
 MDW_EXPORT(mdw_render) void mdw_render(const char *s, size_t n) { g_result = mdw::web::render(std::string_view(s, n)); }
+MDW_EXPORT(mdw_render_mapped) void mdw_render_mapped(const char *s, size_t n) { g_result = mdw::web::render(std::string_view(s, n), true); }
 MDW_EXPORT(mdw_slugify) void mdw_slugify(const char *s, size_t n) { g_result = mdw::web::slug(std::string_view(s, n)); }
 MDW_EXPORT(mdw_result_ptr) const char *mdw_result_ptr() { return g_result.data(); }
 MDW_EXPORT(mdw_result_len) size_t mdw_result_len() { return g_result.size(); }

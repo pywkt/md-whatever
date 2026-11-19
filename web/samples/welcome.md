@@ -34,6 +34,7 @@ At [pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/) you can i
 | `r` | reload the current file from disk |
 | `o` | open files |
 | `e` / `Esc` | edit the source / back to reading |
+| `t` | formatting toolbar |
 | `⌘S` / `Ctrl+S` | save |
 
 Click a row in the sidebar to switch files. The × on a row closes it, and so does a middle click.
@@ -41,6 +42,8 @@ Click a row in the sidebar to switch files. The × on a row closes it, and so do
 ## Edit
 
 Press **Edit** in the top bar, or `e`, to change a file's Markdown source. **Read** or `Esc` shows the result. A dot before a file's name means it has unsaved changes.
+
+To format while you read, press the **A** button next to Edit, or `t`. A toolbar drops down: select some text on this page (or click into a paragraph) and make it bold, italic, a link, a heading, a list or a quote. `⌘B` / `Ctrl+B`, `⌘I` / `Ctrl+I` and `⌘K` / `Ctrl+K` work too, and `⌘Z` / `Ctrl+Z` undoes. The toolbar changes only the Markdown it needs to, and works on the source in Edit as well.
 
 What **Save** does depends on the browser:
 

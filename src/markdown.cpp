@@ -79,7 +79,11 @@ struct ImgInfo {
 class Renderer
 {
 public:
-    Renderer(const RenderHooks &hooks) : m_hooks(hooks) { m_bufs.emplace_back(); }
+    Renderer(const RenderHooks &hooks, std::string_view input)
+        : m_hooks(hooks), m_origin(input.data()), m_size(input.size())
+    {
+        m_bufs.emplace_back();
+    }
 
     std::string take() { return std::move(m_bufs.front()); }
 
@@ -135,6 +139,58 @@ private:
             default: o += char(c);
             }
         }
+    }
+
+    // --- source map (RenderHooks::sourceMap) ---------------------------------
+
+    bool inInput(const char *p, size_t n) const
+    {
+        return m_hooks.sourceMap && p >= m_origin && size_t(p - m_origin) + n <= m_size;
+    }
+
+    // UTF-16 offset of p in the input. Runs mostly arrive in order, so a cursor
+    // moves forward; it starts again only when they go back (footnotes).
+    size_t u16(const char *p)
+    {
+        const size_t target = size_t(p - m_origin);
+        if (target < m_cursorByte) {
+            m_cursorByte = 0;
+            m_cursorUnit = 0;
+        }
+        for (; m_cursorByte < target; ++m_cursorByte) {
+            const unsigned char c = static_cast<unsigned char>(m_origin[m_cursorByte]);
+            if ((c & 0xC0) != 0x80)
+                m_cursorUnit += c >= 0xF0 ? 2 : 1; // 4-byte characters are surrogate pairs
+        }
+        return m_cursorUnit;
+    }
+
+    // A source range [begin, end) seen while collecting a code block or math.
+    struct Span {
+        const char *begin = nullptr, *end = nullptr;
+        void add(const char *p, size_t n)
+        {
+            if (!begin || p < begin)
+                begin = p;
+            if (!end || p + n > end)
+                end = p + n;
+        }
+    };
+
+    // Adds data-s/data-e (the content's source range) to the first tag of html.
+    std::string withRange(std::string html, const Span &r)
+    {
+        if (!m_hooks.sourceMap || !r.begin)
+            return html;
+        const size_t lt = html.find('<');
+        if (lt == std::string::npos)
+            return html;
+        const size_t at = html.find_first_of(" >", lt);
+        if (at == std::string::npos)
+            return html;
+        const size_t b = u16(r.begin), e = u16(r.end);
+        html.insert(at, " data-s=\"" + std::to_string(b) + "\" data-e=\"" + std::to_string(e) + "\"");
+        return html;
     }
 
     void flushTask()
@@ -203,6 +259,7 @@ private:
             auto *c = static_cast<MD_BLOCK_CODE_DETAIL *>(d);
             m_codeLang = rawAttr(c->lang);
             m_code.clear();
+            m_codeRange = {};
             m_inCode = true;
             break;
         }
@@ -251,9 +308,9 @@ private:
             m_inCode = false;
             std::string lang = m_codeLang;
             if (lang == "math" && m_hooks.math) {
-                out() += m_hooks.math(m_code, true);
+                out() += withRange(m_hooks.math(m_code, true), m_codeRange);
             } else if (m_hooks.code) {
-                out() += m_hooks.code(lang, m_code);
+                out() += withRange(m_hooks.code(lang, m_code), m_codeRange);
             } else {
                 out() += "<pre><code" + (lang.empty() ? std::string() : " class=\"language-" + escapeHtml(lang) + "\"")
                          + ">" + escapeHtml(m_code) + "</code></pre>\n";
@@ -302,6 +359,7 @@ private:
         if (t == MD_SPAN_LATEXMATH || t == MD_SPAN_LATEXMATH_DISPLAY) {
             flushTask();
             m_math.clear();
+            m_mathRange = {};
             m_inMath = true;
             return;
         }
@@ -365,7 +423,7 @@ private:
                 return;
             }
             if (m_hooks.math)
-                out() += m_hooks.math(m_math, display);
+                out() += withRange(m_hooks.math(m_math, display), m_mathRange);
             else
                 out() += "<code class=\"math-source\">" + escapeHtml(m_math) + "</code>";
             return;
@@ -385,6 +443,8 @@ private:
     {
         if (m_inCode) {
             m_code += s;
+            if (inInput(s.data(), s.size()))
+                m_codeRange.add(s.data(), s.size());
             return;
         }
         if (m_inMath) {
@@ -392,6 +452,8 @@ private:
                 m_math += '\n';
             else
                 m_math += s;
+            if (inInput(s.data(), s.size()))
+                m_mathRange.add(s.data(), s.size());
             return;
         }
         flushTask();
@@ -400,18 +462,47 @@ private:
         case MD_TEXT_NULLCHAR: out() += "\xEF\xBF\xBD"; break;
         case MD_TEXT_BR: out() += inAlt ? " " : "<br>\n"; break;
         case MD_TEXT_SOFTBR: out() += inAlt ? " " : "\n"; m_run = 0; if (m_inHeading) m_headingPlain += ' '; break;
-        case MD_TEXT_ENTITY: out() += s; break;
+        case MD_TEXT_ENTITY:
+            if (!inAlt && inInput(s.data(), s.size())) {
+                const size_t b = u16(s.data()), e = u16(s.data() + s.size()); // in this order: the cursor goes forward
+                out() += "<span data-s=\"" + std::to_string(b) + "\" data-n=\"" + std::to_string(e - b) + "\">";
+                out() += s;
+                out() += "</span>";
+                m_lastEnd = s.data() + s.size();
+            } else {
+                out() += s;
+            }
+            break;
         default:
-            if (inAlt)
+            if (inAlt) {
                 out() += escapeHtml(s);
-            else
+            } else if (inInput(s.data(), s.size())) {
+                // A backslash escape arrives as the escaped character alone,
+                // right after a backslash that no run included.
+                const char *p = s.data();
+                const bool escaped = t == MD_TEXT_NORMAL && s.size() == 1 && p > m_origin && p[-1] == '\\'
+                                     && m_lastEnd != p && std::string_view("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~").find(s[0]) != std::string_view::npos;
+                if (escaped)
+                    out() += "<span data-s=\"" + std::to_string(u16(p - 1)) + "\" data-n=\"2\">";
+                else
+                    out() += "<span data-s=\"" + std::to_string(u16(p)) + "\">";
                 appendBreakable(s);
+                out() += "</span>";
+                m_lastEnd = p + s.size();
+            } else {
+                appendBreakable(s);
+            }
             if (m_inHeading)
                 m_headingPlain += s;
         }
     }
 
     const RenderHooks &m_hooks;
+    const char *m_origin;
+    size_t m_size;
+    size_t m_cursorByte = 0, m_cursorUnit = 0;
+    const char *m_lastEnd = nullptr;
+    Span m_codeRange, m_mathRange;
     std::vector<std::string> m_bufs;
     std::vector<ImgInfo> m_imgs;
     std::vector<std::pair<unsigned, unsigned>> m_footnoteStack;
@@ -427,8 +518,9 @@ private:
 
 std::string renderMarkdown(std::string_view text, const RenderHooks &hooks)
 {
+    const std::string_view input = text;
     text = stripFrontMatter(text);
-    Renderer r(hooks);
+    Renderer r(hooks, input);
     MD_PARSER p{};
     p.abi_version = 0;
     p.flags = MD_FLAG_TABLES | MD_FLAG_STRIKETHROUGH | MD_FLAG_TASKLISTS | MD_FLAG_PERMISSIVEAUTOLINKS

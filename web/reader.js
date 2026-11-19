@@ -6,6 +6,7 @@ const DATA = JSON.parse($('mdw-data').textContent);
 const {
   paletteCss, scopeCss, baseName, dirName, extOf, resolvePath, splitHref, hasScheme, titleOf,
   decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
+  textDiff, inlineOuter, toggleInline, setLink, removeLink, blockAt, applyBlock,
 } = mdwLib; // web/lib.js
 
 // Same list as kMarkdownSuffixes in md-whatever's mainwindow.cpp.
@@ -24,7 +25,7 @@ const MATHJAX_SRI = 'sha384-my9P1jDckpHD+5LZsLQ0gaiCl/RMO32HaqwBtbo/25QIMVr6xXIU
 
 /* ---------- preferences (per browser; the app keeps these in md-whatever.conf) ---------- */
 
-const prefs = { theme: 'default', appearance: 'system', zoom: 1, railWidth: 268, webImages: false };
+const prefs = { theme: 'default', appearance: 'system', zoom: 1, railWidth: 268, webImages: false, toolbar: false };
 try {
   Object.assign(prefs, JSON.parse(localStorage.getItem('md-whatever-reader') || '{}'));
 } catch (err) { /* private window or blocked storage: defaults are fine */ }
@@ -84,6 +85,7 @@ const engine = (() => {
   return {
     init,
     render: (text) => call('mdw_render', text),
+    renderMapped: (text) => call('mdw_render_mapped', text), // with the source map (web/engine.h)
     slugify: (text) => call('mdw_slugify', text),
     get kind() { return kind; },
   };
@@ -397,7 +399,9 @@ function placeMath(node, result) {
     node.className = 'math-error'; // TeX source in red, as in the app
     node.title = result.message;
   } else {
-    node.replaceWith(result.cloneNode(true));
+    const svg = result.cloneNode(true);
+    for (const k of ['s', 'e']) if (node.dataset[k] != null) svg.dataset[k] = node.dataset[k]; // the formatting toolbar's source map
+    node.replaceWith(svg);
   }
 }
 
@@ -430,12 +434,14 @@ async function typesetIn(article) {
   }
 }
 
-function buildArticle(d) {
+// mapped: with the source map, for the formatting toolbar. It renders the
+// text the toolbar edits (line endings normalized), which looks the same.
+function buildArticle(d, mapped = false) {
   const article = el('article', 'markdown-body');
-  const text = sourceOf(d);
+  const text = mapped ? editText(d) : sourceOf(d);
   let html;
   try {
-    html = engine.render(text);
+    html = mapped ? engine.renderMapped(text) : engine.render(text);
   } catch (err) {
     html = '<h1>This file could not be rendered</h1>\n<p><code></code></p>';
     article.dataset.error = String((err && err.message) || err);
@@ -448,11 +454,13 @@ function buildArticle(d) {
   if (article.dataset.error) tpl.content.querySelector('code').textContent = article.dataset.error;
   prepLinks(tpl.content);
   prepImages(tpl.content, d);
+  if (mapped) for (const n of tpl.content.querySelectorAll('a, img')) n.draggable = false; // drag selects text instead
   if (d.banner) article.append(el('div', 'banner', d.banner));
   article.append(tpl.content);
   if (!text.trim()) article.append(el('p', 'mdw-note', 'This file is empty.'));
   highlightIn(article);
   typesetIn(article);
+  d.articleMapped = mapped;
   return article;
 }
 
@@ -461,14 +469,17 @@ function buildArticle(d) {
 // The document as it is now: rendered, or its source in the editor (Edit mode).
 function showDoc(d) {
   host.classList.toggle('editing', d.editing);
+  host.classList.toggle('formatting', prefs.toolbar && !d.editing);
   if (d.editing) {
     const ta = editorOf(d);
     page.replaceChildren(ta);
     ta.scrollTop = d.editScroll;
   } else {
-    if (!d.article) d.article = buildArticle(d);
+    if (!d.article || d.articleMapped !== prefs.toolbar) d.article = buildArticle(d, prefs.toolbar);
     page.replaceChildren(d.article);
   }
+  pageSel = null;
+  scheduleFormatState();
 }
 
 // Remembers where the document is scrolled before something else is shown.
@@ -513,7 +524,7 @@ function activateDoc(id, opts = {}) {
   renderBar();
   if (!d) {
     page.replaceChildren();
-    host.classList.remove('editing');
+    host.classList.remove('editing', 'formatting');
     host.hidden = true;
     emptyEl.hidden = false;
     return;
@@ -601,6 +612,11 @@ function renderBar() {
   document.title = (d ? dot + d.name + ' · ' : '') + 'md-whatever Reader';
   const mode = $('mode');
   mode.hidden = !d;
+  const fmt = $('format-toggle');
+  fmt.hidden = !d;
+  fmt.setAttribute('aria-pressed', String(prefs.toolbar));
+  $('format').hidden = !(d && prefs.toolbar);
+  if (!d || !prefs.toolbar) $('fmt-link').hidden = true;
   const save = $('save');
   save.hidden = !(d && d.dirty);
   if (d) {
@@ -642,6 +658,8 @@ function adopt(d, r) {
     if (old.isConnected) d.editScroll = old.scrollTop;
     d.editor = null;
     d.draft = null;
+  } else if (!old) {
+    d.draft = null; // a draft from the formatting toolbar, which has no editor of its own
   }
   d.dirty = false;
   if (d.id === activeId) {
@@ -749,8 +767,9 @@ function editorOf(d) {
     ta.value = sourceOf(d); // the only time .value is set: setting it wipes the undo history
     if (d.caret != null) ta.setSelectionRange(d.caret, d.caret);
     d.caret = null;
-    ta.addEventListener('input', () => noteEdit(d));
+    ta.addEventListener('input', () => { noteEdit(d); scheduleFormatState(); });
     ta.addEventListener('keydown', (e) => editorKey(e, d));
+    for (const type of ['keyup', 'mouseup', 'select', 'focus']) ta.addEventListener(type, scheduleFormatState);
     d.editor = ta;
   }
   return d.editor;
@@ -934,6 +953,525 @@ async function save(d, { as = false } = {}) {
   } finally {
     d.saving = false;
   }
+}
+
+/* ---------- formatting toolbar ----------
+   Formatting changes the Markdown source with lib.js's operations; this part
+   finds what they work on. In Read mode, the page is rendered with the
+   engine's source map (web/engine.h), and the selection is turned into source
+   offsets and back. In Edit mode, the textarea's selection is used as it is. */
+
+// The text formatting works on: the draft, or the file with LF line endings.
+const editText = (d) => (d.draft != null ? d.draft : baseOf(d));
+
+const INLINE_TAGS = { STRONG: 'strong', EM: 'em', DEL: 'del', CODE: 'code', A: 'link' };
+const MATH_SEL = 'code.math-pending, code.math-error, code.math-source, svg.math, span.math-display';
+const LEAVES = 'span[data-s]:not([data-e]), [data-e]'; // mapped text runs, code blocks, math (never nested)
+
+function inlineKind(node) {
+  if (node.nodeType !== 1) return null;
+  if (node.matches(MATH_SEL)) return 'math';
+  if (node.tagName === 'CODE' && node.parentElement && node.parentElement.tagName === 'PRE') return null;
+  return INLINE_TAGS[node.tagName] || null;
+}
+
+// Inline elements of a mapped render, with their source ranges: { kind, s, cs,
+// ce, e } (whole, content). One that can't be placed exactly (an image or a
+// footnote mark inside, say) is opaque: formatting goes around it, not into it.
+function inlineElements(container, text) {
+  const out = [];
+  const memo = new Map();
+  const NONE = 0; // a node with no source of its own (a line break)
+  const range = (node) => {
+    if (node.nodeType !== 1) return NONE;
+    if (memo.has(node)) return memo.get(node);
+    let r = NONE;
+    const kind = inlineKind(node);
+    if (node.tagName === 'SPAN' && node.hasAttribute('data-s') && !node.hasAttribute('data-e')) {
+      const s = Number(node.dataset.s);
+      r = [s, s + (node.hasAttribute('data-n') ? Number(node.dataset.n) : node.textContent.length)];
+    } else if (kind === 'math') {
+      if (node.hasAttribute('data-e')) {
+        const cs = Number(node.dataset.s);
+        const ce = Number(node.dataset.e);
+        const o = inlineOuter(text, 'math', cs, ce);
+        if (o) out.push({ kind, s: o.s, cs, ce, e: o.e });
+        r = o ? [o.s, o.e] : null;
+      }
+    } else if (node.tagName === 'IMG' || node.tagName === 'SUP' || node.classList.contains('mdw-img-note')) {
+      r = null;
+    } else {
+      let lo = Infinity;
+      let hi = -Infinity;
+      let unknown = false;
+      for (const child of node.childNodes) {
+        const c = range(child);
+        if (c === null) unknown = true;
+        else if (c) {
+          lo = Math.min(lo, c[0]);
+          hi = Math.max(hi, c[1]);
+        }
+      }
+      if (kind && lo <= hi) {
+        const o = unknown ? null : inlineOuter(text, kind, lo, hi);
+        if (o) out.push({ kind, cs: lo, ce: hi, ...o });
+        else out.push({ kind, s: lo, cs: lo, ce: hi, e: hi, opaque: true });
+        r = o ? [o.s, o.e] : null;
+      } else {
+        r = unknown ? null : lo <= hi ? [lo, hi] : NONE;
+      }
+    }
+    memo.set(node, r);
+    return r;
+  };
+  for (const node of container.querySelectorAll('strong, em, del, code, a, span.math-display')) range(node);
+  return out;
+}
+
+// The inline elements of a text: from the page when it shows that text with
+// the source map (Read mode), else from a render nobody sees. Cached by text.
+let structCache = { text: null, els: [] };
+function structure(text) {
+  if (structCache.text !== text) {
+    const d = current();
+    let container = d && !d.editing && d.articleMapped && d.article && editText(d) === text ? d.article : null;
+    if (!container) {
+      const tpl = document.createElement('template');
+      tpl.innerHTML = engine.renderMapped(text);
+      container = tpl.content;
+    }
+    structCache = { text, els: inlineElements(container, text) };
+  }
+  return structCache.els;
+}
+
+/* the rendered page <-> the source */
+
+const rangeBetween = (n1, o1, n2, o2) => {
+  const r = document.createRange();
+  r.setStart(n1, o1);
+  r.setEnd(n2, o2);
+  return r;
+};
+
+// A leaf's source range: a text run, or the content of a code block or math.
+function leafRange(leaf) {
+  const s = Number(leaf.dataset.s);
+  if (leaf.hasAttribute('data-e')) return [s, Number(leaf.dataset.e)];
+  return [s, s + (leaf.hasAttribute('data-n') ? Number(leaf.dataset.n) : leaf.textContent.length)];
+}
+// Math counts with its dollars.
+function atomRange(leaf, text) {
+  const [cs, ce] = leafRange(leaf);
+  const o = leaf.matches(MATH_SEL) ? inlineOuter(text, 'math', cs, ce) : null;
+  return o ? [o.s, o.e] : [cs, ce];
+}
+
+// A point of the page (node, offset) as a source offset. side: 'start' or
+// 'end' of a selection, for points between pieces of text.
+function pointToSource(article, text, node, offset, side) {
+  const elem = node.nodeType === 1 ? node : node.parentElement;
+  const span = elem && elem.closest('span[data-s]:not([data-e])');
+  if (span && article.contains(span)) {
+    const s = Number(span.dataset.s);
+    const k = rangeBetween(span, 0, node, offset).toString().length;
+    if (span.hasAttribute('data-n')) return k === 0 ? s : s + Number(span.dataset.n); // an entity or escape is one piece
+    return s + k;
+  }
+  const pre = elem && elem.closest('pre[data-s]');
+  if (pre && article.contains(pre)) { // code: the start of that line
+    const lines = (rangeBetween(pre, 0, node, offset).toString().match(/\n/g) || []).length;
+    let p = Number(pre.dataset.s);
+    for (let i = 0; i < lines; i++) {
+      const n = text.indexOf('\n', p);
+      if (n < 0 || n >= Number(pre.dataset.e)) break;
+      p = n + 1;
+    }
+    return p;
+  }
+  const atom = elem && elem.closest('[data-e]');
+  if (atom && article.contains(atom)) {
+    const [s, e] = atomRange(atom, text);
+    return side === 'start' ? s : e;
+  }
+  // Between pieces: the next one's start, or the previous one's end.
+  const leaves = article.querySelectorAll(LEAVES);
+  if (!leaves.length) return 0;
+  const at = document.createRange();
+  at.setStart(node, offset);
+  let lo = 0;
+  let hi = leaves.length;
+  while (lo < hi) { // first leaf at or after the point
+    const mid = (lo + hi) >> 1;
+    if (at.comparePoint(leaves[mid], 0) >= 0) hi = mid;
+    else lo = mid + 1;
+  }
+  if (side === 'start') return lo < leaves.length ? atomRange(leaves[lo], text)[0] : atomRange(leaves[leaves.length - 1], text)[1];
+  return lo > 0 ? atomRange(leaves[lo - 1], text)[1] : atomRange(leaves[0], text)[0];
+}
+
+// The other way, to put the selection back after the page was re-rendered.
+function sourceToPoint(article, text, pos, side) {
+  let best = null;
+  for (const leaf of article.querySelectorAll(LEAVES)) {
+    const [s, e] = leaf.matches('span[data-s]:not([data-e])') ? leafRange(leaf) : atomRange(leaf, text);
+    if (s <= pos && pos <= e && (side === 'start' ? pos < e || s === e : pos > s || s === e)) {
+      if (leaf.hasAttribute('data-e') || leaf.hasAttribute('data-n')) {
+        const i = [...leaf.parentNode.childNodes].indexOf(leaf);
+        return pos === s ? { node: leaf.parentNode, offset: i } : { node: leaf.parentNode, offset: i + 1 };
+      }
+      let k = pos - s;
+      const walk = document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
+      let t = null;
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        t = n;
+        if (k <= n.length) return { node: n, offset: k };
+        k -= n.length;
+      }
+      return t ? { node: t, offset: t.length } : { node: leaf, offset: 0 };
+    }
+    // Not inside: remember the nearest on the right side of pos.
+    if (side === 'start' ? s >= pos && (!best || s < best.d) : e <= pos && (!best || e > best.d))
+      best = { leaf, d: side === 'start' ? s : e };
+  }
+  if (!best) return { node: article, offset: side === 'start' ? 0 : article.childNodes.length };
+  const i = [...best.leaf.parentNode.childNodes].indexOf(best.leaf);
+  return { node: best.leaf.parentNode, offset: side === 'start' ? i : i + 1 };
+}
+
+// The page's selection, through the shadow root: { a, b } in the source, or null.
+function readPageSelection(d) {
+  const article = d.article;
+  if (!article || !article.isConnected) return null;
+  const sel = document.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  let r = null;
+  if (sel.getComposedRanges) {
+    try { r = sel.getComposedRanges({ shadowRoots: [root] })[0]; } catch (err) {
+      try { r = sel.getComposedRanges(root)[0]; } catch (err2) { r = null; }
+    }
+  }
+  if ((!r || !article.contains(r.startContainer)) && root.getSelection) {
+    const own = root.getSelection();
+    if (own && own.rangeCount) r = own.getRangeAt(0);
+  }
+  if (!r) r = sel.getRangeAt(0);
+  const inStart = article.contains(r.startContainer);
+  const inEnd = article.contains(r.endContainer);
+  if (!inStart && !inEnd) return null;
+  const text = editText(d);
+  const a = inStart ? pointToSource(article, text, r.startContainer, r.startOffset, 'start') : 0;
+  const b = inEnd ? pointToSource(article, text, r.endContainer, r.endOffset, 'end') : text.length;
+  return { a: Math.min(a, b), b: Math.max(a, b) };
+}
+
+function setPageSelection(d, a, b) {
+  const text = editText(d);
+  const start = sourceToPoint(d.article, text, a, 'start');
+  const end = a === b ? start : sourceToPoint(d.article, text, b, 'end');
+  try {
+    document.getSelection().setBaseAndExtent(start.node, start.offset, end.node, end.offset);
+  } catch (err) { /* the selection stays where it was */ }
+  pageSel = { id: d.id, text, a, b };
+}
+
+// The last selection made in the page (Read mode). Kept while the focus is in
+// the toolbar (its URL field, the block menu), which would clear the page's own.
+let pageSel = null;
+document.addEventListener('selectionchange', () => {
+  if (!prefs.toolbar) return;
+  const d = current();
+  if (!d || d.editing) return;
+  const r = readPageSelection(d);
+  if (r) {
+    pageSel = { id: d.id, text: editText(d), ...r };
+    scheduleFormatState();
+  }
+});
+
+/* actions */
+
+const INLINE_ACTIONS = new Set(['strong', 'em', 'del', 'code']);
+
+function runFormat(text, a, b, action, arg, empty) {
+  if (action === 'codeblock') return applyBlock(text, a, b, 'code');
+  if (INLINE_ACTIONS.has(action)) return toggleInline(text, a, b, action, structure(text), { empty });
+  if (action === 'link') return setLink(text, a, b, arg, structure(text));
+  if (action === 'unlink') return removeLink(text, a, b, structure(text));
+  return applyBlock(text, a, b, action);
+}
+
+// Where an action applies: { d, text, a, b }, or null after saying why not.
+function formatTarget() {
+  const d = current();
+  if (!d) return null;
+  if (d.editing) {
+    syncDraft(d);
+    const ta = d.editor;
+    return { d, text: ta.value, a: ta.selectionStart, b: ta.selectionEnd };
+  }
+  const text = editText(d);
+  if (!pageSel || pageSel.id !== d.id || pageSel.text !== text) {
+    toast('Select some text in the document first, or click where the change should go.');
+    return null;
+  }
+  return { d, text, a: pageSel.a, b: pageSel.b };
+}
+
+function format(action, arg) {
+  const t = formatTarget();
+  if (!t) return false;
+  const r = runFormat(t.text, t.a, t.b, action, arg, t.d.editing);
+  if (r.error) {
+    toast(r.error);
+    return false;
+  }
+  if (t.d.editing) replaceInEditor(t.d, t.text, r);
+  else if (r.text !== t.text) commitPage(t.d, t.text, r, [t.a, t.b]);
+  else setPageSelection(t.d, r.a, r.b);
+  scheduleFormatState();
+  return true;
+}
+
+// Edit mode: one native edit, so Ctrl+Z undoes the whole action.
+function replaceInEditor(d, before, r) {
+  const ta = d.editor;
+  if (r.text !== before) {
+    const { start, oldEnd, newEnd } = textDiff(before, r.text);
+    const ins = r.text.slice(start, newEnd);
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(start, oldEnd);
+    const ok = ins ? document.execCommand('insertText', false, ins) : document.execCommand('delete');
+    if (!ok && ta.value === before) ta.setRangeText(ins, start, oldEnd); // no execCommand: right text, no undo step
+  }
+  ta.setSelectionRange(r.a, r.b);
+  ta.focus({ preventScroll: true });
+  noteEdit(d);
+}
+
+// The draft as the toolbar left it. The source editor, if one was made, is
+// replaced next time (setting a textarea's text would wipe its undo history
+// anyway), the way live reload replaces it.
+function setDraftText(d, text, caret) {
+  if (d.editor) {
+    d.editor = null;
+    d.caret = caret;
+  }
+  d.draft = text;
+  delete d.title;
+  d.dirty = text !== baseOf(d);
+  renderRail();
+  renderBar();
+}
+
+function rerenderPage(d, a, b) {
+  const keep = host.scrollTop;
+  d.article = buildArticle(d, true);
+  page.replaceChildren(d.article);
+  host.scrollTop = keep;
+  setPageSelection(d, a, b);
+}
+
+// Read mode: undo is the toolbar's own, one step per action.
+function commitPage(d, before, r, selBefore) {
+  const h = d.history || (d.history = { undo: [], redo: [] });
+  const top = h.undo[h.undo.length - 1];
+  if (top && top.after !== before) h.undo = []; // the text changed some other way since
+  h.undo.push({ before, after: r.text, selBefore, selAfter: [r.a, r.b] });
+  if (h.undo.length > 200) h.undo.shift();
+  h.redo = [];
+  setDraftText(d, r.text, r.a);
+  rerenderPage(d, r.a, r.b);
+}
+
+function undoFormat(redo) {
+  const d = current();
+  if (!d) return;
+  if (d.editing) {
+    d.editor.focus({ preventScroll: true });
+    document.execCommand(redo ? 'redo' : 'undo');
+    return;
+  }
+  const h = d.history;
+  const from = h && (redo ? h.redo : h.undo);
+  const step = from && from[from.length - 1];
+  const now = editText(d);
+  if (!step || (redo ? step.before : step.after) !== now) {
+    if (h) h.undo = h.redo = [];
+    toast(redo ? 'Nothing to redo.' : 'Nothing to undo here. Changes made in Edit are undone there.');
+    return;
+  }
+  from.pop();
+  (redo ? h.undo : h.redo).push(step);
+  const [a, b] = redo ? step.selAfter : step.selBefore;
+  setDraftText(d, redo ? step.after : step.before, a);
+  rerenderPage(d, a, b);
+  scheduleFormatState();
+}
+
+/* the link field */
+
+let linkTarget = null; // where the link goes: { id, text, a, b }, fixed when the field opens
+
+function openLinkField() {
+  const t = formatTarget();
+  if (!t) return;
+  linkTarget = { id: t.d.id, editing: t.d.editing, text: t.text, a: t.a, b: t.b };
+  const link = structure(t.text).filter((x) => x.kind === 'link' && !x.opaque && x.s <= t.a && t.b <= x.e)
+    .sort((x, y) => (x.e - x.s) - (y.e - y.s))[0];
+  let url = '';
+  if (link) url = link.ds != null ? t.text.slice(link.ds, link.de).replace(/^<(.*)>$/s, '$1') : link.ref ? '' : t.text.slice(link.cs, link.ce);
+  const input = $('fmt-url');
+  input.value = url;
+  $('fmt-unlink').hidden = !link;
+  $('fmt-link').hidden = false;
+  input.focus();
+  input.select();
+}
+
+function closeLinkField(refocus = true) {
+  $('fmt-link').hidden = true;
+  linkTarget = null;
+  if (refocus) focusDoc();
+}
+
+function applyLinkField(remove) {
+  const t = linkTarget;
+  const d = current();
+  closeLinkField();
+  if (!t || !d || d.id !== t.id || d.editing !== t.editing) return;
+  const now = d.editing ? (syncDraft(d), d.editor.value) : editText(d);
+  if (now !== t.text) {
+    toast('The document changed meanwhile. Select the text again.');
+    return;
+  }
+  const r = remove ? removeLink(t.text, t.a, t.b, structure(t.text)) : setLink(t.text, t.a, t.b, $('fmt-url').value, structure(t.text));
+  if (r.error) {
+    toast(r.error);
+    return;
+  }
+  if (d.editing) replaceInEditor(d, t.text, r);
+  else commitPage(d, t.text, r, [t.a, t.b]);
+  scheduleFormatState();
+}
+
+/* the toolbar itself */
+
+function setToolbar(on) {
+  prefs.toolbar = on;
+  savePrefs();
+  renderBar();
+  const d = current();
+  if (d && !d.editing) {
+    const keep = host.scrollTop;
+    showDoc(d); // re-rendered with (or without) the source map
+    host.scrollTop = keep;
+  } else if (d) {
+    host.classList.toggle('formatting', false);
+  }
+  if (on && d) focusDoc();
+}
+
+// Buttons show what the selection is: bold, in a list, a heading...
+let stateTimer = 0;
+function scheduleFormatState() {
+  if (!prefs.toolbar) return;
+  clearTimeout(stateTimer);
+  stateTimer = setTimeout(updateFormatState, 80);
+}
+
+function updateFormatState() {
+  const d = current();
+  if (!d || !prefs.toolbar) return;
+  let text;
+  let a;
+  let b;
+  if (d.editing) {
+    if (!d.editor) return;
+    text = d.editor.value;
+    a = d.editor.selectionStart;
+    b = d.editor.selectionEnd;
+  } else {
+    text = editText(d);
+    const ok = pageSel && pageSel.id === d.id && pageSel.text === text;
+    a = ok ? pageSel.a : -1;
+    b = ok ? pageSel.b : -1;
+  }
+  const pressed = new Set();
+  let block = 'p';
+  if (a >= 0) {
+    if (text.length < 300000) { // a long document in Edit mode: not on every keystroke
+      for (const x of structure(text)) if (!x.opaque && x.s <= a && b <= x.e) pressed.add(x.kind);
+    }
+    const at = blockAt(text, a);
+    block = at.block === 'code' ? 'codeblock' : at.block === 'fm' ? 'p' : at.block;
+    if (at.block === 'code') pressed.add('codeblock');
+    if (at.list) pressed.add(at.list);
+    if (at.quote) pressed.add('quote');
+  }
+  for (const btn of document.querySelectorAll('#format [data-fmt]')) {
+    if (btn.hasAttribute('aria-pressed')) btn.setAttribute('aria-pressed', String(pressed.has(btn.dataset.fmt)));
+  }
+  const select = $('fmt-block');
+  select.querySelector('[value="codeblock"]').hidden = block !== 'codeblock';
+  select.value = block;
+}
+
+function bindToolbar() {
+  $('format-toggle').addEventListener('click', () => setToolbar(!prefs.toolbar));
+  const bar = $('format');
+  for (const btn of bar.querySelectorAll('[data-fmt]')) {
+    const key = btn.dataset.key;
+    const name = btn.getAttribute('aria-label');
+    btn.title = key ? `${name} (${MOD}${key === 'Z' ? 'Z' : key})` : name;
+    // Keep the page's selection: a click on a button doesn't take the focus.
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', () => {
+      const f = btn.dataset.fmt;
+      if (f === 'link') openLinkField();
+      else if (f === 'undo' || f === 'redo') undoFormat(f === 'redo');
+      else format(f);
+    });
+  }
+  const select = $('fmt-block');
+  select.addEventListener('change', () => {
+    format(select.value);
+    focusDoc();
+  });
+  $('fmt-link').addEventListener('submit', (e) => {
+    e.preventDefault();
+    applyLinkField(false);
+  });
+  $('fmt-unlink').addEventListener('click', () => applyLinkField(true));
+  $('fmt-link-cancel').addEventListener('click', () => closeLinkField());
+  $('fmt-url').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeLinkField();
+    }
+  });
+
+  // Ctrl/Cmd+B, I, K, and in Read mode Z / Shift+Z / Y, while the toolbar is shown.
+  document.addEventListener('keydown', (e) => {
+    if (!prefs.toolbar || !(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return;
+    const d = current();
+    if (!d) return;
+    const target = e.composedPath()[0];
+    const inEditor = d.editing && target === d.editor;
+    const inPage = !d.editing && !isTyping(target);
+    if (!inEditor && !inPage) return;
+    const k = (e.key || '').toLowerCase();
+    const action = { b: 'strong', i: 'em', k: 'link' }[k];
+    if (action && !e.shiftKey) {
+      e.preventDefault();
+      if (action === 'link') openLinkField();
+      else format(action);
+    } else if (inPage && (k === 'z' || k === 'y')) {
+      e.preventDefault();
+      undoFormat(k === 'y' || e.shiftKey);
+    }
+  });
 }
 
 /* ---------- opening files ---------- */
@@ -1348,6 +1886,10 @@ function followLocal(d, rel, frag) {
 
 root.addEventListener('click', (e) => {
   const a = e.target.closest ? e.target.closest('a[href]') : null;
+  if (a && prefs.toolbar && !(e.ctrlKey || e.metaKey)) {
+    e.preventDefault(); // formatting: a click puts the cursor in the link text; Ctrl/Cmd+click follows it
+    return;
+  }
   if (!a || a.target === '_blank') return; // web and mail links open in a new tab
   e.preventDefault();
   const d = current();
@@ -1370,6 +1912,7 @@ function isTyping(target) {
 
 let dragDepth = 0;
 function bind() {
+  bindToolbar();
   const select = $('theme-select');
   for (const name of Object.keys(DATA.themes)) {
     if (name !== 'base') select.append(new Option(name, name));
@@ -1527,6 +2070,7 @@ function bind() {
       case 'g': scroller.scrollTop = 0; break;
       case 'G': scroller.scrollTop = scroller.scrollHeight; break;
       case 'e': setEditing(d, true); break;
+      case 't': setToolbar(!prefs.toolbar); break;
       case '[': step(-1); break;
       case ']': step(1); break;
       case '+': case '=': setZoom(prefs.zoom + 0.1); break;

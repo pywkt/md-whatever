@@ -51,6 +51,11 @@ a:not([href]) { color: inherit; text-decoration: none; }
   overflow-wrap: anywhere;
 }
 
+/* Formatting in Read mode (the toolbar is shown): text is for selecting, so
+   links don't drag or look clickable (Ctrl/Cmd+click still follows them). */
+:host(.formatting) a { cursor: text; -webkit-user-drag: none; }
+:host(.formatting) img { -webkit-user-drag: none; }
+
 /*--B--*/
 /* Breeze Light / Breeze Dark, the app's default code themes. */
 :host {

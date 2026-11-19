@@ -186,4 +186,7 @@ if(MDW_NODE)
   # Editing: modes, saving in place byte for byte, conflicts, downloads.
   add_test(NAME web-edit COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/edit.cjs ${_o}/md-whatever.html)
   set_tests_properties(web-edit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  # The formatting toolbar: Read-mode selections to source and back, undo, saving.
+  add_test(NAME web-live COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/live.cjs ${_o}/md-whatever.html)
+  set_tests_properties(web-live PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
 endif()

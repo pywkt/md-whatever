@@ -130,3 +130,162 @@ test('Latin-1 (as browsers read it: windows-1252) round-trips every byte', () =>
 test('binary files are refused', () => {
   assert.deepEqual(lib.decodeBytes(new Uint8Array([0x23, 0, 0x41])), { binary: true });
 });
+
+/* ---------- formatting toolbar ---------- */
+
+// Writes a selection into the text as « and », to keep the cases readable.
+const show = (r) => (r.error ? 'error: ' + r.error : r.text.slice(0, r.a) + '«' + r.text.slice(r.a, r.b) + '»' + r.text.slice(r.b));
+// The reverse: "Hello «brave» world" -> text, a, b. A lone | is a caret.
+function sel(marked) {
+  const caret = marked.indexOf('|');
+  if (caret >= 0) return { text: marked.replace('|', ''), a: caret, b: caret };
+  const a = marked.indexOf('«');
+  const b = marked.indexOf('»') - 1;
+  return { text: marked.replace('«', '').replace('»', ''), a, b };
+}
+// Inline elements of a text, as the page finds them in its rendered DOM.
+function els(text, list) {
+  return list.map(([kind, content, from = 0]) => {
+    const cs = text.indexOf(content, from);
+    const o = lib.inlineOuter(text, kind, cs, cs + content.length);
+    assert.ok(o, `${kind} around ${content}`);
+    return { kind, cs, ce: cs + content.length, ...o };
+  });
+}
+
+test('edits and position mapping', () => {
+  const r = lib.applyEdits('abcdef', [{ at: 4, del: 2, ins: 'X' }, { at: 1, del: 0, ins: '**' }]);
+  assert.equal(r.text, 'a**bcdX');
+  assert.equal(r.map(1, -1), 1);
+  assert.equal(r.map(1, 1), 3);
+  assert.equal(r.map(5, 1), 7); // inside a replacement: its end
+  assert.equal(r.map(6), 7);
+  assert.deepEqual(lib.textDiff('hello world', 'hello brave world'), { start: 6, oldEnd: 6, newEnd: 12 });
+  assert.deepEqual(lib.wordAt("it's here", 2), [0, 4]);
+  assert.deepEqual(lib.wordAt('a  b', 2), [2, 2]);
+});
+
+test('element ranges from their content', () => {
+  const t = 'x **b** *i* __u__ ~~d~~ `c` `` `x` `` $m$ [l](http://a.b "t") [r][ref] <http://x.y> www.z.org';
+  const at = (s) => [t.indexOf(s), t.indexOf(s) + s.length];
+  const outer = (kind, s, from) => {
+    const [cs, ce] = from || at(s);
+    const o = lib.inlineOuter(t, kind, cs, ce);
+    return o && t.slice(o.s, o.e);
+  };
+  assert.equal(outer('strong', 'b'), '**b**');
+  assert.equal(outer('em', 'i'), '*i*');
+  assert.equal(outer('strong', 'u'), '__u__');
+  assert.equal(outer('del', 'd'), '~~d~~');
+  assert.equal(outer('code', 'c'), '`c`');
+  assert.equal(outer('code', '`x`'), '`` `x` ``');
+  assert.equal(outer('math', 'm'), '$m$');
+  assert.equal(outer('link', 'l'), '[l](http://a.b "t")');
+  assert.equal(outer('link', 'r'), '[r][ref]');
+  assert.equal(outer('link', 'http://x.y'), '<http://x.y>');
+  assert.equal(outer('link', 'www.z.org'), 'www.z.org');
+  assert.equal(outer('strong', 'i'), null, 'not what the source says');
+  const l = lib.inlineOuter(t, 'link', ...at('l'));
+  assert.equal(t.slice(l.ds, l.de), 'http://a.b');
+});
+
+test('bold, italic, strikethrough, code', () => {
+  const run = (marked, kind, list = [], opts) => {
+    const { text, a, b } = sel(marked);
+    return show(lib.toggleInline(text, a, b, kind, els(text, list), opts));
+  };
+  assert.equal(run('Hello «brave» world', 'strong'), 'Hello **«brave»** world');
+  assert.equal(run('Hello« brave »world', 'em'), 'Hello *«brave»* world', 'spaces stay outside');
+  assert.equal(run('Hello br|ave world', 'del'), 'Hello ~~«brave»~~ world', 'caret: the word');
+  assert.equal(run('Hello | world', 'strong'), 'error: Select some text first, or put the cursor in a word.');
+  assert.equal(run('Hello | world', 'strong', [], { empty: true }), 'Hello **«»** world');
+  // toggling off: all of it, or split around the selection
+  assert.equal(run('Hello **«brave»** world', 'strong', [['strong', 'brave']]), 'Hello «brave» world');
+  assert.equal(run('Hello «**brave**» world', 'strong', [['strong', 'brave']]), 'Hello «brave» world', 'markers selected too');
+  assert.equal(run('Hello __b«rav»e__ world', 'strong', [['strong', 'brave']]), 'Hello **b**«rav»**e** world');
+  assert.equal(run('**one «two» three**', 'strong', [['strong', 'one two three']]), '**one** «two» **three**');
+  assert.equal(run('Hello **br|ave** world', 'strong', [['strong', 'brave']]), 'Hello «brave» world', 'caret in bold');
+  // merging with what it touches
+  assert.equal(run('«a **b** c»', 'strong', [['strong', 'b']]), '**«a b c»**');
+  assert.equal(run('a **b «c** d»', 'strong', [['strong', 'b c']]), 'a **«b c d»**');
+  // never interleaved with other elements
+  assert.equal(run('see [the li«nk](u) here»', 'strong', [['link', 'the link']]), 'see **«[the link](u) here»**');
+  assert.equal(run('x `co«de` y» z', 'em', [['code', 'code']]), 'x *«`code` y»* z');
+  assert.equal(run('a «*b*» c', 'em', [['em', 'b']]), 'a «b» c');
+  // code: backticks inside take a longer fence
+  assert.equal(run('run «a`b» now', 'code'), 'run ``«a`b»`` now');
+  assert.equal(run('run «`x`» now', 'code'), 'run `` «`x`» `` now');
+  assert.equal(run('run `«x»` now', 'code', [['code', 'x']]), 'run «x» now');
+  // opaque (unknown) elements can't be cut
+  const text = 'a xyz b';
+  const r = lib.toggleInline(text, 0, 3, 'strong', [{ kind: 'link', s: 2, cs: 2, ce: 5, e: 5, opaque: true }]);
+  assert.match(r.error, /can't be made bold/);
+});
+
+test('links', () => {
+  const run = (marked, url, list = []) => {
+    const { text, a, b } = sel(marked);
+    return show(lib.setLink(text, a, b, url, els(text, list)));
+  };
+  assert.equal(run('Go «there» now', 'https://x.y'), 'Go [«there»](https://x.y) now');
+  assert.equal(run('Go th|ere now', 'https://x.y'), 'Go [«there»](https://x.y) now');
+  assert.equal(run('Go | now', 'https://x.y'), 'Go [«https://x.y»](https://x.y) now');
+  assert.equal(run('a «b» c', 'my file.md'), 'a [«b»](<my file.md>) c');
+  assert.equal(run('a [l«in»k](old "t") c', 'new', [['link', 'link']]), 'a [«link»](new "t") c', 'changes the address');
+  assert.equal(run('a [lin«k»][r] c', 'new', [['link', 'link']]), 'a [«link»](new) c', 'reference link -> inline');
+  assert.equal(run('a «b»', ''), 'error: Type the address for the link.');
+  const rm = (marked, list) => {
+    const { text, a, b } = sel(marked);
+    return show(lib.removeLink(text, a, b, els(text, list)));
+  };
+  assert.equal(rm('a [li|nk](u) c', [['link', 'link']]), 'a «link» c');
+  assert.equal(rm('see www.x.org| now', [['link', 'www.x.org']]).slice(0, 12), 'error: Web a');
+  assert.equal(rm('no | link', []), 'error: There is no link here.');
+});
+
+test('block types: headings and paragraphs', () => {
+  const run = (marked, kind) => {
+    const { text, a, b } = sel(marked);
+    return show(lib.applyBlock(text, a, b, kind));
+  };
+  assert.equal(run('one tw|o\n', 'h2'), '## one tw«»o\n');
+  assert.equal(run('## one tw|o\n', 'h2'), 'one tw«»o\n', 'the same heading again: back to a paragraph');
+  assert.equal(run('## one tw|o ##\n', 'p'), 'one tw«»o\n', 'closing hashes go too');
+  assert.equal(run('# a|\n', 'h3'), '### a«»\n');
+  assert.equal(run('first\nsec|ond  \nthird\n\nnext\n', 'h1'), '# first sec«»ond third\n\nnext\n', 'one line');
+  assert.equal(run('Title|\n=====\n\ntext\n', 'p'), 'Title«»\n\ntext\n', 'setext');
+  assert.equal(run('Title|\n---\n', 'h1'), '# Title«»\n');
+  assert.equal(run('> - [ ] it|em\n', 'h2'), '> - [ ] ## it«»em\n', 'inside a quote and a task');
+  assert.equal(run('«a\n\nb»\n', 'h1'), '«# a\n\n# b»\n');
+  assert.equal(run('```\nco|de\n```\n', 'h1'), 'error: That is inside a code block. Only Quote and Code block apply there.');
+  assert.equal(run('---\nti|tle: x\n---\nbody\n', 'h1'), 'error: That is the front matter at the top of the file. Use Edit to change it.');
+});
+
+test('block types: lists, quotes, code blocks, rules', () => {
+  const run = (marked, kind) => {
+    const { text, a, b } = sel(marked);
+    return show(lib.applyBlock(text, a, b, kind));
+  };
+  assert.equal(run('«a\n\nb»\n', 'ul'), '«- a\n\n- b»\n');
+  assert.equal(run('«a\n\nb»\n', 'ol'), '«1. a\n\n2. b»\n');
+  assert.equal(run('«- a\n- b»\n', 'ol'), '«1. a\n2. b»\n', 'one kind of list to another');
+  assert.equal(run('«1. a\n2. b»\n', 'ol'), '«a\nb»\n', 'off again');
+  assert.equal(run('- [x] d|one\n- todo\n', 'task'), 'd«»one\n- todo\n', 'already a task: off');
+  assert.equal(run('«- [x] done\n- todo»\n', 'task'), '«- [x] done\n- [ ] todo»\n', 'checked boxes stay checked');
+  assert.equal(run('long par|agraph\nwrapped here\n', 'ul'), '- long par«»agraph\nwrapped here\n', 'one item');
+  assert.equal(run('«a\n\nb»\n', 'quote'), '«> a\n>\n> b»\n');
+  assert.equal(run('«> a\n>\n> b»\n', 'quote'), '«a\n\nb»\n');
+  assert.equal(run('x\n\n«a\nb»\n\ny\n', 'code'), 'x\n\n«```\na\nb\n```»\n\ny\n');
+  assert.equal(run('«a\n```js\nb\n```»\n', 'code'), '«````\na\n```js\nb\n```\n````»\n', 'longer fence around a fence');
+  assert.equal(run('```js\nb|\n```\nafter\n', 'code'), 'b«»\nafter\n', 'off again');
+  assert.equal(run('para|graph\nnext line\n', 'hr'), 'paragraph\nnext line\n\n---«»\n');
+  assert.equal(run('> quo|ted\n', 'hr'), '> quoted\n>\n> ---«»\n');
+});
+
+test('the block at a position', () => {
+  assert.deepEqual(lib.blockAt('# Title\n', 3), { block: 'h1', list: null, quote: false });
+  assert.deepEqual(lib.blockAt('Title\n---\n', 2), { block: 'h2', list: null, quote: false });
+  assert.deepEqual(lib.blockAt('> 1. item\n', 5), { block: 'p', list: 'ol', quote: true });
+  assert.deepEqual(lib.blockAt('text\n\n```\ncode\n```\n', 12), { block: 'code', list: null, quote: false });
+  assert.deepEqual(lib.blockAt('---\na: b\n---\n', 5), { block: 'fm', list: null, quote: false });
+});

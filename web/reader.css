@@ -325,3 +325,69 @@ button, select, input { font: inherit; color: inherit; }
 }
 .notice span { flex: 1 1 16em; }
 .notice .btn { flex: none; min-height: 26px; }
+
+/* ---- formatting toolbar ---- */
+.icon-btn[aria-pressed="true"] { background: var(--ui-select); border-color: var(--ui-accent); }
+.format-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 38px;
+  padding: 4px max(8px, env(safe-area-inset-right, 0px)) 4px max(8px, env(safe-area-inset-left, 0px));
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--ui-window);
+  border-bottom: 1px solid var(--ui-rule);
+}
+.fmt-group { flex: none; display: flex; align-items: center; gap: 2px; }
+.fmt-group + .fmt-group { margin-left: 4px; padding-left: 6px; border-left: 1px solid var(--ui-rule); }
+.fmt-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fmt-btn:hover { border-color: var(--ui-accent); background: var(--ui-base); }
+.fmt-btn[aria-pressed="true"] { background: var(--ui-select); border-color: var(--ui-accent); }
+.fmt-btn svg { display: block; }
+.fmt-btn b { font-weight: 700; }
+.fmt-btn i { font-family: Georgia, "Times New Roman", serif; font-size: 15px; }
+.fmt-mono { font: 12px var(--ui-mono); letter-spacing: -0.02em; }
+#fmt-block {
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 1px solid var(--ui-rule);
+  border-radius: 5px;
+  background: var(--ui-base);
+  cursor: pointer;
+}
+#fmt-block:hover { border-color: var(--ui-accent); }
+.fmt-link { flex: 1 0 auto; display: flex; align-items: center; gap: 6px; margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--ui-rule); }
+.fmt-link input {
+  flex: 1 1 16em;
+  min-width: 10em;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 5px;
+  background: var(--ui-base);
+  font: 13px var(--ui-mono);
+}
+.fmt-link .btn { flex: none; min-height: 28px; }
+@media (max-width: 720px) {
+  .format-bar { flex-wrap: wrap; row-gap: 4px; overflow-x: visible; }
+  .fmt-link { flex-basis: 100%; margin-left: 0; padding-left: 0; border-left: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .format-bar { animation: fmt-in 0.14s ease-out; }
+  @keyframes fmt-in { from { opacity: 0; transform: translateY(-6px); } }
+}

@@ -33,6 +33,7 @@ function wrap(exports) {
   };
   return {
     render: (input) => call('mdw_render', typeof input === 'string' ? Buffer.from(input) : input),
+    mapped: (input) => call('mdw_render_mapped', typeof input === 'string' ? Buffer.from(input) : input),
     slug: (text) => call('mdw_slugify', Buffer.from(text)).toString(),
   };
 }
@@ -49,7 +50,7 @@ test.before(async () => {
   asm = wrap(factory());
 });
 
-const native = (file) => execFileSync(env('MDW_ENGINE_NATIVE'), ['render', file], { maxBuffer: 64 << 20 });
+const native = (file, mode = 'render') => execFileSync(env('MDW_ENGINE_NATIVE'), [mode, file], { maxBuffer: 64 << 20 });
 const nativeSlug = (text) => execFileSync(env('MDW_ENGINE_NATIVE'), ['slug', text]).toString();
 
 const fixtures = [
@@ -65,6 +66,75 @@ test('every fixture renders identically: wasm, JS fallback, native', () => {
     assert.ok(wasm.render(bytes).equals(expected), `wasm differs from native for ${path.basename(file)}`);
     assert.ok(asm.render(bytes).equals(expected), `JS fallback differs from native for ${path.basename(file)}`);
   }
+});
+
+test('the source map is identical too: wasm, JS fallback, native', () => {
+  for (const file of fixtures) {
+    const bytes = fs.readFileSync(file);
+    const expected = native(file, 'render-mapped');
+    assert.ok(wasm.mapped(bytes).equals(expected), `mapped wasm differs from native for ${path.basename(file)}`);
+    assert.ok(asm.mapped(bytes).equals(expected), `mapped JS fallback differs from native for ${path.basename(file)}`);
+  }
+});
+
+// --- the source map (formatting toolbar) -------------------------------------------
+
+const unescape = (h) => h.replace(/<wbr>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+const SPAN = /<span data-s="(\d+)"(?: data-n="(\d+)")?>((?:[^<]|<wbr>)*)<\/span>/g;
+
+test('without the map nothing is left behind; with it, only spans and ranges are added', () => {
+  for (const file of fixtures) {
+    const bytes = fs.readFileSync(file);
+    const plain = wasm.render(bytes).toString();
+    const mapped = wasm.mapped(bytes).toString();
+    assert.doesNotMatch(plain, /data-[sen]=/, path.basename(file));
+    const stripped = mapped.replace(SPAN, '$3').replace(/ data-s="\d+" data-e="\d+"/g, '');
+    assert.equal(stripped, plain, `${path.basename(file)}: the map changed more than it should`);
+  }
+});
+
+test('every mapped run is exactly its source text (UTF-16 offsets)', () => {
+  let runs = 0;
+  for (const file of fixtures) {
+    const bytes = fs.readFileSync(file);
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes); // what the page would pass
+    const out = wasm.mapped(Buffer.from(text)).toString();
+    for (const m of out.matchAll(SPAN)) {
+      const s = Number(m[1]);
+      const shown = unescape(m[3]);
+      runs++;
+      if (m[2]) {
+        const src = text.slice(s, s + Number(m[2]));
+        assert.ok(src.startsWith('&') || (src.length === 2 && src[0] === '\\' && src[1] === shown),
+          `${path.basename(file)} @${s}: atomic run ${JSON.stringify(src)} for ${JSON.stringify(shown)}`);
+      } else {
+        assert.equal(text.slice(s, s + shown.length), shown, `${path.basename(file)} @${s}`);
+      }
+    }
+    for (const m of out.matchAll(/<(pre|code|span) data-s="(\d+)" data-e="(\d+)" class="(code|math-pending|math-display)"/g)) {
+      const src = text.slice(Number(m[2]), Number(m[3]));
+      assert.ok(src.length > 0, `${path.basename(file)}: empty ${m[4]} range`);
+      if (m[4] === 'math-pending' && !src.includes('\n'))
+        assert.ok(text[Number(m[2]) - 1] === '$' && text[Number(m[3])] === '$', `${path.basename(file)}: math ${JSON.stringify(src)} sits between dollars`);
+    }
+  }
+  assert.ok(runs > 1000, 'the fixtures have plenty of runs');
+});
+
+test('source map: escapes, entities, code, math, astral characters, front matter', () => {
+  const m = (md) => wasm.mapped(md).toString();
+  assert.equal(m('a \\*b\\* &amp; c\n'),
+    '<p><span data-s="0">a </span><span data-s="2" data-n="2">*</span><span data-s="4">b</span><span data-s="5" data-n="2">*</span>'
+    + '<span data-s="7"> </span><span data-s="8" data-n="5">&amp;</span><span data-s="13"> c</span></p>\n');
+  // a literal backslash before a letter is plain text, and \\ escapes a backslash
+  assert.match(m('x\\y and \\\\*z\n'), /<span data-s="0">x\\y and <\/span><span data-s="8" data-n="2">\\<\/span>/);
+  assert.equal(m('😀 **b**\n'), '<p><span data-s="0">😀 </span><strong><span data-s="5">b</span></strong></p>\n');
+  assert.equal(m('---\nt: 1\n---\n# H\n'), '<h1 id="h"><span data-s="15">H</span></h1>\n');
+  assert.equal(m('```js\nx\ny\n```\n'), '<pre data-s="6" data-e="9" class="code" data-lang="js"><code>x\ny\n</code></pre>\n');
+  assert.equal(m('$x^2$ and $$y$$\n'),
+    '<p><code data-s="1" data-e="4" class="math-pending">$x^2$</code><span data-s="5"> and </span>'
+    + '<span data-s="12" data-e="13" class="math-display"><code class="math-pending">$$y$$</code></span>\n</p>\n');
+  assert.equal(m('![alt *x*](a.png)\n'), '<p><img src="a.png" alt="alt x"></p>\n', 'nothing inside alt text');
 });
 
 test('slugs match native', () => {

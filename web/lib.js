@@ -155,11 +155,591 @@ function lineEnding(text) {
 // Text from the editor (LF only) with the file's line ending put back.
 const withLineEnding = (text, eol) => (eol === '\n' ? normalizeNewlines(text) : normalizeNewlines(text).replace(/\n/g, eol));
 
+/* ---------- formatting toolbar: changes to the Markdown source ----------
+   Every operation takes the text (LF line endings) and a selection [a, b] in
+   it, and returns { text, a, b } (the new text and where the selection goes)
+   or { error } (a sentence for the reader). Nothing is regenerated: each
+   operation is a few insertions and deletions, so the rest of the file stays
+   byte for byte as it was. */
+
+// edits: [{ at, del, ins }], not overlapping. map(p, assoc) moves a position
+// of the old text into the new one; at an insertion point assoc > 0 means
+// after the inserted text, assoc < 0 before it.
+function applyEdits(text, edits) {
+  const sorted = edits.filter((e) => e.del || e.ins).sort((x, y) => x.at - y.at || x.del - y.del);
+  let out = '';
+  let pos = 0;
+  for (const e of sorted) {
+    out += text.slice(pos, e.at) + e.ins;
+    pos = e.at + e.del;
+  }
+  out += text.slice(pos);
+  const map = (p, assoc = -1) => {
+    let delta = 0;
+    for (const e of sorted) {
+      const end = e.at + e.del;
+      if (end < p || (end === p && e.del > 0) || (e.at === p && !e.del && assoc > 0)) {
+        delta += e.ins.length - e.del;
+        continue;
+      }
+      if (e.at < p && p < end) return e.at + delta + (assoc > 0 ? e.ins.length : 0);
+      break;
+    }
+    return p + delta;
+  };
+  return { text: out, map };
+}
+
+// The part of old that changed into new: old[start, oldEnd) became new[start, newEnd).
+function textDiff(before, after) {
+  let start = 0;
+  const max = Math.min(before.length, after.length);
+  while (start < max && before[start] === after[start]) start++;
+  let oldEnd = before.length;
+  let newEnd = after.length;
+  while (oldEnd > start && newEnd > start && before[oldEnd - 1] === after[newEnd - 1]) {
+    oldEnd--;
+    newEnd--;
+  }
+  return { start, oldEnd, newEnd };
+}
+
+const isSpace = (c) => c === ' ' || c === '\t' || c === '\n' || c === '\r';
+const WORD = /[\p{L}\p{N}\p{M}'’]/u;
+
+// The word around p (letters, digits, inner apostrophes), or [p, p].
+function wordAt(text, p) {
+  let a = p;
+  let b = p;
+  while (a > 0 && WORD.test(text[a - 1])) a--;
+  while (b < text.length && WORD.test(text[b])) b++;
+  while (a < b && /['’]/.test(text[a])) a++;
+  while (b > a && /['’]/.test(text[b - 1])) b--;
+  return a < b ? [a, b] : [p, p];
+}
+
+// After "(" of an inline link: where its destination is, and where the link ends.
+function linkTail(text, i) {
+  const n = text.length;
+  const ws = () => { while (i < n && isSpace(text[i])) i++; };
+  ws();
+  let ds;
+  let de;
+  if (text[i] === '<') {
+    const j = text.indexOf('>', i + 1);
+    if (j < 0 || text.slice(i, j).includes('\n')) return null;
+    ds = i;
+    de = j + 1;
+    i = de;
+  } else {
+    ds = i;
+    let depth = 0;
+    while (i < n && !isSpace(text[i])) {
+      const c = text[i];
+      if (c === '\\') { i += 2; continue; }
+      if (c === '(') depth++;
+      else if (c === ')' && depth-- === 0) break;
+      i++;
+    }
+    de = Math.min(i, n);
+  }
+  ws();
+  const open = text[i];
+  if (de > ds && (open === '"' || open === "'" || open === '(')) {
+    const close = open === '(' ? ')' : open;
+    let j = i + 1;
+    while (j < n && text[j] !== close) j += text[j] === '\\' ? 2 : 1;
+    if (j >= n) return null;
+    i = j + 1;
+    ws();
+  }
+  return text[i] === ')' ? { ds, de, end: i + 1 } : null;
+}
+
+const BARE_LINK = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.|mailto:)|^[^\s@]+@[^\s@]+$/i;
+
+// An inline element's whole source range from the range of its content
+// (cs, ce): { s, e }, plus { ds, de } (the destination) for inline links.
+// null when the source around it isn't what that element would be written as.
+function inlineOuter(text, kind, cs, ce) {
+  const before = (n) => text.slice(Math.max(0, cs - n), cs);
+  const after = (n) => text.slice(ce, ce + n);
+  switch (kind) {
+    case 'strong': {
+      const d = before(2);
+      return (d === '**' || d === '__') && after(2) === d ? { s: cs - 2, e: ce + 2 } : null;
+    }
+    case 'em': {
+      const d = before(1);
+      return (d === '*' || d === '_') && after(1) === d ? { s: cs - 1, e: ce + 1 } : null;
+    }
+    case 'del':
+      for (const d of ['~~', '~']) if (before(d.length) === d && after(d.length) === d) return { s: cs - d.length, e: ce + d.length };
+      return null;
+    case 'code': {
+      let s = cs;
+      let e = ce;
+      if (text[s - 1] === ' ' && text[e] === ' ' && text[s - 2] === '`' && text[e + 1] === '`') { s--; e++; }
+      let n = 0;
+      while (text[s - 1 - n] === '`') n++;
+      let m = 0;
+      while (text[e + m] === '`') m++;
+      return n && n === m ? { s: s - n, e: e + m } : null;
+    }
+    case 'math':
+      for (const d of ['$$', '$']) if (before(d.length) === d && after(d.length) === d) return { s: cs - d.length, e: ce + d.length };
+      return null;
+    case 'link': {
+      if (before(1) === '<' && after(1) === '>') return { s: cs - 1, e: ce + 1, auto: true };
+      if (before(1) !== '[' || after(1) !== ']') return BARE_LINK.test(text.slice(cs, ce)) ? { s: cs, e: ce, bare: true } : null;
+      const next = text[ce + 1];
+      if (next === '(') {
+        const t = linkTail(text, ce + 2);
+        return t ? { s: cs - 1, e: t.end, ds: t.ds, de: t.de } : null;
+      }
+      if (next === '[') {
+        const j = text.indexOf(']', ce + 2);
+        return j < 0 ? null : { s: cs - 1, e: j + 1, ref: true };
+      }
+      return { s: cs - 1, e: ce + 1, ref: true };
+    }
+    default:
+      return null;
+  }
+}
+
+const DELIM = { strong: '**', em: '*', del: '~~' };
+const NOUN = { strong: 'bold', em: 'italic', del: 'strikethrough', code: 'code', link: 'a link' };
+
+// Moves the ends of [a, b] out of elements they cut through: an end inside
+// another element (or inside its markers) takes in the whole element, so
+// markers never interleave. Unknown elements ({ opaque: true }) can't be cut.
+function widen(a, b, els) {
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const x of els) {
+      const aIn = x.s < a && a < x.e;
+      const bIn = x.s < b && b < x.e;
+      if (aIn === bIn) {
+        if (aIn && a < x.cs && b > x.ce) { a = x.s; b = x.e; changed = true; } // markers on both sides: all of it
+        continue;
+      }
+      if (x.opaque) return null;
+      if (aIn) a = x.s;
+      else b = x.e;
+      changed = true;
+    }
+  }
+  return [a, b];
+}
+
+function trimRange(text, a, b) {
+  while (a < b && isSpace(text[a])) a++;
+  while (b > a && isSpace(text[b - 1])) b--;
+  return [a, b];
+}
+
+function codeFence(content) {
+  let longest = 0;
+  for (const m of content.matchAll(/`+/g)) longest = Math.max(longest, m[0].length);
+  const fence = '`'.repeat(longest + 1);
+  const pad = content.startsWith('`') || content.endsWith('`') ? ' ' : '';
+  return [fence + pad, pad + fence];
+}
+
+// Bold, italic, strikethrough or code on [a, b]. els: the inline elements of
+// the text, { kind, s, cs, ce, e } (whole range, content range). empty: with
+// nothing selected and no word at the caret, insert empty markers (the source
+// editor) instead of failing (the rendered page, where they would just show).
+function toggleInline(text, a, b, kind, els = [], { empty = false } = {}) {
+  if (a > b) [a, b] = [b, a];
+  const same = els.filter((x) => x.kind === kind && !x.opaque);
+  const innermost = (list) => list.sort((x, y) => (x.e - x.s) - (y.e - y.s))[0];
+  if (a === b) {
+    const inside = innermost(same.filter((x) => x.cs <= a && a <= x.ce));
+    if (inside) [a, b] = [inside.cs, inside.ce];
+    else [a, b] = wordAt(text, a);
+    if (a === b) {
+      if (!empty) return { error: 'Select some text first, or put the cursor in a word.' };
+      const [open, close] = kind === 'code' ? ['`', '`'] : [DELIM[kind], DELIM[kind]];
+      return { text: text.slice(0, a) + open + close + text.slice(a), a: a + open.length, b: a + open.length };
+    }
+  }
+  [a, b] = trimRange(text, a, b);
+  if (a === b) return { error: 'Select some text first, or put the cursor in a word.' };
+  const range = widen(a, b, els);
+  if (!range) return { error: `This part of the document can't be made ${NOUN[kind]} from here. Use Edit to change its source.` };
+  [a, b] = range;
+
+  const edits = [];
+  const container = innermost(same.filter((x) => x.s <= a && b <= x.e));
+  if (container) {
+    // Already that: take it away from the selection (or all of it).
+    const x = container;
+    let ca = Math.max(a, x.cs);
+    let cb = Math.min(b, x.ce);
+    if (kind === 'code' || (ca <= x.cs && cb >= x.ce)) {
+      edits.push({ at: x.s, del: x.cs - x.s, ins: '' }, { at: x.ce, del: x.e - x.ce, ins: '' });
+      const r = applyEdits(text, edits);
+      return { text: r.text, a: r.map(x.cs, 1), b: r.map(x.ce, -1) };
+    }
+    // Split: what stays before and after keeps the formatting. Spaces at the
+    // cut go to the plain middle (markers next to a space don't count).
+    const [sa, sb] = [ca, cb];
+    while (ca > x.cs && isSpace(text[ca - 1])) ca--;
+    while (cb < x.ce && isSpace(text[cb])) cb++;
+    const d = DELIM[kind];
+    const left = ca > x.cs;
+    const right = cb < x.ce;
+    edits.push({ at: x.s, del: x.cs - x.s, ins: left ? d : '' });
+    if (left) edits.push({ at: ca, del: 0, ins: d });
+    if (right) edits.push({ at: cb, del: 0, ins: d });
+    edits.push({ at: x.ce, del: x.e - x.ce, ins: right ? d : '' });
+    const r = applyEdits(text, edits);
+    return { text: r.text, a: r.map(sa, 1), b: r.map(sb, -1) };
+  }
+
+  // Add it, taking in elements of the same kind it touches.
+  for (const x of same) {
+    if (x.e < a || x.s > b) continue;
+    a = Math.min(a, x.s);
+    b = Math.max(b, x.e);
+  }
+  for (const x of same) {
+    if (x.s < a || x.e > b) continue;
+    edits.push({ at: x.s, del: x.cs - x.s, ins: '' }, { at: x.ce, del: x.e - x.ce, ins: '' });
+  }
+  let open = DELIM[kind];
+  let close = open;
+  if (kind === 'code') {
+    const r0 = applyEdits(text, edits);
+    [open, close] = codeFence(r0.text.slice(r0.map(a, 1), r0.map(b, -1)));
+  }
+  edits.push({ at: a, del: 0, ins: open }, { at: b, del: 0, ins: close });
+  const r = applyEdits(text, edits);
+  return { text: r.text, a: r.map(a, 1), b: r.map(b, -1) };
+}
+
+// A link destination as Markdown writes it: <...> when it has spaces or brackets.
+function linkDest(url) {
+  return /[\s()<>]/.test(url) ? '<' + url.replace(/</g, '%3C').replace(/>/g, '%3E').replace(/\n/g, '%0A') + '>' : url;
+}
+
+// Makes [a, b] a link to url, or changes the address of the link it is in.
+function setLink(text, a, b, url, els = []) {
+  url = String(url || '').trim();
+  if (!url) return { error: 'Type the address for the link.' };
+  const dest = linkDest(url);
+  if (a > b) [a, b] = [b, a];
+  const links = els.filter((x) => x.kind === 'link' && !x.opaque);
+  const inLink = links.filter((x) => x.s <= a && b <= x.e).sort((x, y) => (x.e - x.s) - (y.e - y.s))[0];
+  if (inLink) {
+    const x = inLink;
+    if (x.ds != null) { // an inline link: just its address (after the text, so the text stays put)
+      const r = applyEdits(text, [{ at: x.ds, del: x.de - x.ds, ins: dest }]);
+      return { text: r.text, a: x.cs, b: x.ce };
+    }
+    const label = text.slice(x.cs, x.ce);
+    const r = applyEdits(text, [{ at: x.s, del: x.e - x.s, ins: `[${label}](${dest})` }]);
+    return { text: r.text, a: x.s + 1, b: x.s + 1 + label.length };
+  }
+  if (a === b) [a, b] = wordAt(text, a);
+  if (a === b) {
+    const ins = `[${url}](${dest})`;
+    return { text: text.slice(0, a) + ins + text.slice(a), a: a + 1, b: a + 1 + url.length };
+  }
+  [a, b] = trimRange(text, a, b);
+  const range = widen(a, b, els);
+  if (!range) return { error: "This part of the document can't be made a link from here. Use Edit to change its source." };
+  [a, b] = range;
+  const edits = [];
+  for (const x of links) {
+    if (x.s < a || x.e > b) continue;
+    if (x.bare) continue; // a bare address inside link text is just text there
+    edits.push({ at: x.s, del: x.cs - x.s, ins: '' }, { at: x.ce, del: x.e - x.ce, ins: '' });
+  }
+  edits.push({ at: a, del: 0, ins: '[' }, { at: b, del: 0, ins: `](${dest})` });
+  const r = applyEdits(text, edits);
+  return { text: r.text, a: r.map(a, 1), b: r.map(b, -1) };
+}
+
+// Takes the links in (or around) [a, b] away, keeping their text.
+function removeLink(text, a, b, els = []) {
+  if (a > b) [a, b] = [b, a];
+  const hit = els.filter((x) => x.kind === 'link' && !x.opaque && (a === b ? x.s <= a && a <= x.e : x.s < b && a < x.e));
+  if (!hit.length) return { error: 'There is no link here.' };
+  if (hit.some((x) => x.bare || x.auto))
+    return { error: 'Web and email addresses written out in full are always links. Change the text in Edit to unlink one.' };
+  const edits = [];
+  for (const x of hit) edits.push({ at: x.s, del: x.cs - x.s, ins: '' }, { at: x.ce, del: x.e - x.ce, ins: '' });
+  const r = applyEdits(text, edits);
+  const first = Math.min(a, ...hit.map((x) => x.s));
+  const last = Math.max(b, ...hit.map((x) => x.e));
+  return { text: r.text, a: r.map(first, 1), b: r.map(last, -1) };
+}
+
+/* blocks: whole source lines */
+
+function lineStarts(text) {
+  const starts = [0];
+  for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) starts.push(i + 1);
+  return starts;
+}
+function lineIndex(starts, pos) {
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= pos) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+// One line, taken apart: quote markers, indentation, list marker, task box,
+// heading marker, then the content. Each part is the exact source text.
+function parseLine(line) {
+  const quote = /^(?: {0,3}>[ \t]?)*/.exec(line)[0];
+  let rest = line.slice(quote.length);
+  const indent = /^[ \t]*/.exec(rest)[0];
+  rest = rest.slice(indent.length);
+  const out = { quote, indent, list: '', listType: null, task: '', heading: '', level: 0, content: '', blank: !rest.trim() };
+  out.fence = indent.length < 4 || quote ? /^(`{3,}|~{3,})/.exec(rest) : null;
+  out.hr = indent.length < 4 && /^([-*_])(?:[ \t]*\1){2,}[ \t]*$/.test(rest);
+  if (out.fence || out.hr || out.blank) { out.content = rest; return out; }
+  const lm = /^([-+*]|\d{1,9}[.)])(?:[ \t]+|$)/.exec(rest);
+  if (lm) {
+    out.list = lm[0];
+    out.listType = /\d/.test(lm[1]) ? 'ol' : 'ul';
+    rest = rest.slice(lm[0].length);
+    out.fence = /^(`{3,}|~{3,})/.exec(rest); // a list item that starts with a code block
+    if (out.fence) { out.content = rest; return out; }
+    const tm = /^\[[ xX]\](?:[ \t]+|$)/.exec(rest);
+    if (tm) {
+      out.task = tm[0];
+      out.listType = 'task';
+      rest = rest.slice(tm[0].length);
+    }
+  }
+  const hm = /^(#{1,6})(?:[ \t]+|$)/.exec(rest);
+  if (hm && (lm || indent.length < 4)) {
+    out.heading = hm[0];
+    out.level = hm[1].length;
+    rest = rest.slice(hm[0].length);
+  }
+  out.content = rest;
+  return out;
+}
+
+// What each line is: { kind: 'fm' (front matter) | 'fence' (a code block,
+// fences included) | 'text', block: [first, last] line of its code block }.
+function lineKinds(lines) {
+  const kinds = lines.map(() => ({ kind: 'text' }));
+  let i = 0;
+  if (/^(?:﻿)?---[ \t]*$/.test(lines[0] || '')) {
+    let j = 1;
+    while (j < lines.length && !/^(?:---|\.\.\.)[ \t]*$/.test(lines[j])) j++;
+    if (j < lines.length) {
+      for (let k = 0; k <= j; k++) kinds[k] = { kind: 'fm' };
+      i = j + 1;
+    }
+  }
+  for (; i < lines.length; i++) {
+    const p = parseLine(lines[i]);
+    if (!p.fence) continue;
+    const ch = p.fence[1][0];
+    const len = p.fence[1].length;
+    if (ch === '`' && p.content.slice(len).includes('`')) continue; // not a fence: an inline code span
+    let j = i + 1;
+    for (; j < lines.length; j++) {
+      const q = parseLine(lines[j]);
+      if (q.fence && q.fence[1][0] === ch && q.fence[1].length >= len && !q.content.slice(q.fence[1].length).trim()) break;
+    }
+    const last = Math.min(j, lines.length - 1);
+    for (let k = i; k <= last; k++) kinds[k] = { kind: 'fence', block: [i, last] };
+    i = last;
+  }
+  return kinds;
+}
+
+const SETEXT = /^ {0,3}(=+|-+)[ \t]*$/;
+
+// The blocks lines L1..L2 belong to, widened to whole blocks: { start, end,
+// type: 'p' | 'h' | 'li' | 'code' | 'hr', first: parseLine(start), setext }.
+function blockUnits(lines, kinds, L1, L2) {
+  const startsBlock = (p) => !!(p.list || p.heading || p.hr || p.fence);
+  const isCont = (i) => {
+    if (i <= 0 || kinds[i].kind !== 'text' || kinds[i - 1].kind !== 'text') return false;
+    const p = parseLine(lines[i]);
+    const prev = parseLine(lines[i - 1]);
+    if (p.blank || prev.blank || prev.heading || prev.hr) return false;
+    return !startsBlock(p) || (SETEXT.test(lines[i]) && !prev.list && !startsBlock(prev));
+  };
+  if (kinds[L1].kind === 'fence') L1 = kinds[L1].block[0];
+  if (kinds[L2].kind === 'fence') L2 = kinds[L2].block[1];
+  while (isCont(L1)) L1--;
+  while (L2 + 1 < lines.length && isCont(L2 + 1)) L2++;
+  const units = [];
+  let u = null;
+  for (let i = L1; i <= L2; i++) {
+    const k = kinds[i];
+    if (k.kind === 'fm') continue;
+    if (k.kind === 'fence') {
+      units.push({ start: k.block[0], end: k.block[1], type: 'code', first: parseLine(lines[k.block[0]]) });
+      u = null;
+      i = k.block[1];
+      continue;
+    }
+    const p = parseLine(lines[i]);
+    if (p.blank) { u = null; continue; }
+    if (u && u.type === 'p' && !u.setext && SETEXT.test(lines[i]) && !startsBlock(u.first)) {
+      u.end = i;
+      u.setext = SETEXT.exec(lines[i])[1][0] === '=' ? 1 : 2;
+      u.type = 'h';
+      u = null;
+      continue;
+    }
+    if (u && !startsBlock(p) && (u.type === 'p' || u.type === 'li')) { u.end = i; continue; }
+    u = { start: i, end: i, first: p, type: p.hr ? 'hr' : p.heading ? 'h' : p.list ? 'li' : 'p' };
+    units.push(u);
+    if (u.type === 'hr' || u.type === 'h') u = null;
+  }
+  return { units, L1, L2 };
+}
+
+// The block at pos, for the toolbar: { block: 'p' | 'h1'..'h6' | 'code' | 'fm',
+// list: null | 'ul' | 'ol' | 'task', quote: bool }.
+function blockAt(text, pos) {
+  const lines = text.split('\n');
+  const L = lineIndex(lineStarts(text), pos);
+  const kinds = lineKinds(lines);
+  if (kinds[L].kind === 'fm') return { block: 'fm', list: null, quote: false };
+  const p = parseLine(lines[L]);
+  if (kinds[L].kind === 'fence') return { block: 'code', list: null, quote: !!p.quote };
+  const { units } = blockUnits(lines, kinds, L, L);
+  const u = units.find((x) => x.start <= L && L <= x.end) || { first: p, type: 'p' };
+  const level = u.setext || u.first.level;
+  return { block: level ? 'h' + level : 'p', list: u.first.listType, quote: !!u.first.quote };
+}
+
+const BLOCK_KINDS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'task', 'quote', 'code', 'hr'];
+
+// A block action on the lines [a, b] touches. kind: one of BLOCK_KINDS.
+function applyBlock(text, a, b, kind) {
+  if (!BLOCK_KINDS.includes(kind)) return { error: 'Unknown block type: ' + kind };
+  if (a > b) [a, b] = [b, a];
+  const starts = lineStarts(text);
+  const lines = text.split('\n');
+  const kinds = lineKinds(lines);
+  const L1 = lineIndex(starts, a);
+  const L2 = Math.max(L1, lineIndex(starts, b > a && starts.includes(b) ? b - 1 : b));
+  for (let i = L1; i <= L2; i++) if (kinds[i].kind === 'fm') return { error: 'That is the front matter at the top of the file. Use Edit to change it.' };
+  const { units, L1: from, L2: to } = blockUnits(lines, kinds, L1, L2);
+  const lineEnd = (i) => starts[i] + lines[i].length;
+  const prefixLen = (p) => p.quote.length + p.indent.length;
+  const edits = [];
+  const done = (r = applyEdits(text, edits)) => ({ text: r.text, a: r.map(a, kind === 'hr' ? 1 : -1), b: r.map(b, 1) });
+  const textUnits = units.filter((u) => u.type === 'p' || u.type === 'h' || u.type === 'li');
+
+  if (kind === 'quote') {
+    const nonBlank = [];
+    for (let i = from; i <= to; i++) if (lines[i].trim()) nonBlank.push(i);
+    const all = nonBlank.length && nonBlank.every((i) => /^ {0,3}>/.test(lines[i]));
+    for (let i = from; i <= to; i++) {
+      if (all) {
+        const m = /^ {0,3}> ?/.exec(lines[i]);
+        if (m) edits.push({ at: starts[i], del: m[0].length, ins: '' });
+      } else {
+        edits.push({ at: starts[i], del: 0, ins: lines[i].trim() ? '> ' : '>' });
+      }
+    }
+    return done();
+  }
+
+  if (kind === 'code') {
+    if (units.length === 1 && units[0].type === 'code') {
+      const [o, c] = [units[0].start, units[0].end];
+      const closed = c > o && parseLine(lines[c]).fence;
+      if (closed) edits.push({ at: lineEnd(c - 1), del: lineEnd(c) - lineEnd(c - 1), ins: '' });
+      edits.push({ at: starts[o], del: (o + 1 < lines.length ? starts[o + 1] : lineEnd(o)) - starts[o], ins: '' });
+      return done();
+    }
+    if (!units.length) return { error: 'Put the cursor in some text first.' };
+    const body = lines.slice(from, to + 1).join('\n');
+    let longest = 2;
+    for (const m of body.matchAll(/^(?: {0,3}>[ \t]?)*[ \t]*(`{3,})/gm)) longest = Math.max(longest, m[1].length);
+    const fence = parseLine(lines[from]).quote + '`'.repeat(longest + 1);
+    edits.push({ at: starts[from], del: 0, ins: fence + '\n' }, { at: lineEnd(to), del: 0, ins: '\n' + fence });
+    return done();
+  }
+
+  if (kind === 'hr') {
+    if (!units.length && !lines[L2].trim()) {
+      edits.push({ at: starts[L2], del: 0, ins: '---' + (L2 + 1 < lines.length ? '\n' : '') });
+      return done();
+    }
+    const q = parseLine(lines[to]).quote;
+    edits.push({ at: lineEnd(to), del: 0, ins: '\n' + (q ? q.trimEnd() : '') + '\n' + q + '---' });
+    const r = applyEdits(text, edits);
+    const after = r.map(lineEnd(to), 1);
+    return { text: r.text, a: after, b: after };
+  }
+
+  if (!textUnits.length) return { error: units.length ? 'That is inside a code block. Only Quote and Code block apply there.' : 'Put the cursor in some text first.' };
+
+  if (kind === 'p' || kind[0] === 'h') {
+    let level = kind === 'p' ? 0 : Number(kind[1]);
+    if (level && textUnits.every((u) => (u.setext || u.first.level) === level)) level = 0;
+    for (const u of textUnits) {
+      const p = u.first;
+      const cur = u.setext || p.level;
+      if (cur === level && !u.setext) continue;
+      if (!cur && !level) continue;
+      const at = starts[u.start] + prefixLen(p) + p.list.length + p.task.length;
+      edits.push({ at, del: p.heading.length, ins: level ? '#'.repeat(level) + ' ' : '' });
+      if (!level && p.heading) {
+        const close = /[ \t]+#+[ \t]*$/.exec(lines[u.start]);
+        if (close && close.index >= at - starts[u.start] + p.heading.length) edits.push({ at: starts[u.start] + close.index, del: close[0].length, ins: '' });
+      }
+      const last = u.setext ? u.end - 1 : u.end;
+      if (level) {
+        for (let i = u.start + 1; i <= last; i++) { // a heading is one line
+          const q = parseLine(lines[i]);
+          const lead = q.quote.length + q.indent.length;
+          let trail = 0;
+          while (trail < lines[i - 1].length && /[ \t\\]/.test(lines[i - 1][lines[i - 1].length - 1 - trail])) trail++;
+          edits.push({ at: lineEnd(i - 1) - trail, del: trail + 1 + lead, ins: ' ' });
+        }
+      }
+      if (u.setext) edits.push({ at: lineEnd(u.end - 1), del: lineEnd(u.end) - lineEnd(u.end - 1), ins: '' });
+    }
+    return done();
+  }
+
+  // lists
+  const all = textUnits.every((u) => u.first.listType === kind);
+  let n = 1;
+  for (const u of textUnits) {
+    const p = u.first;
+    const at = starts[u.start] + prefixLen(p);
+    if (all) {
+      edits.push({ at, del: p.list.length + p.task.length, ins: '' });
+      continue;
+    }
+    const keepTask = kind === 'task' && p.task ? p.task.replace(/[ \t]+$/, '') + ' ' : '[ ] ';
+    const marker = kind === 'ul' ? '- ' : kind === 'ol' ? `${n++}. ` : '- ' + keepTask;
+    edits.push({ at, del: p.list.length + p.task.length, ins: marker });
+  }
+  return done();
+}
+
 return {
   mix, paletteCss, scopeSelector, scopeCss,
   baseName, dirName, extOf, resolvePath, safeDecode, splitHref, hasScheme,
   titleOf,
   decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
+  applyEdits, textDiff, wordAt, inlineOuter, toggleInline, setLink, removeLink,
+  parseLine, blockAt, applyBlock, BLOCK_KINDS,
 };
 })();
 

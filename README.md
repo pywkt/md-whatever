@@ -291,7 +291,9 @@ What you get:
   math (MathJax, with the app's settings), and every theme in light and dark,
   picked in the sidebar.
 - **Editing** the Markdown source, with saving back to the file in browsers
-  that allow it. See [Editing in the browser](#editing-in-the-browser).
+  that allow it, and a **formatting toolbar** for bold, links, headings,
+  lists and so on, right in the rendered page. See
+  [Editing in the browser](#editing-in-the-browser).
 - **Live reload**, and **Recent** files in the sidebar, in the browsers that
   allow it (below).
 
@@ -347,9 +349,33 @@ undo history while you switch between files. `Tab` inserts two spaces;
 
 There's no autosave: unsaved changes live only in the open tab.
 
+**Formatting toolbar.** The **A** button next to **Edit** (or `t`) shows a
+toolbar under the top bar, so you can format a document while reading it:
+select some text (or click into a paragraph) and use a button.
+
+- **Inline:** bold, italic, strikethrough, code and links (`⌘B` / `Ctrl+B`,
+  `⌘I` / `Ctrl+I`, `⌘K` / `Ctrl+K`). Pressing one on text that already has it
+  takes it away. A link gets its address from a small field in the toolbar,
+  which also changes or removes an existing link.
+- **Blocks:** paragraph or heading 1-6 (the menu shows what the cursor is
+  in), bulleted, numbered and task lists, quote, code block, and a horizontal
+  rule.
+- Every change is a small edit to the Markdown itself: the toolbar adds or
+  removes the markers and leaves the rest of the file exactly as you wrote it
+  (`*` or `_`, line breaks, list markers). The result counts as unsaved
+  changes like any other edit.
+- `⌘Z` / `Ctrl+Z` undoes (`⌘⇧Z` / `Ctrl+Shift+Z` redoes), also with the
+  buttons at the end of the toolbar.
+- While the toolbar is shown, a click on a link puts the cursor in it instead
+  of following it. `⌘`-click / `Ctrl`-click follows it.
+- The toolbar works on the source in Edit mode too, as one undoable step each.
+  After formatting in the rendered page, the source editor's own undo history
+  starts again.
+
 Keys are the app's (`j`/`k`, `Space`, `g`/`G`, `r`) plus `[` / `]` for the
 previous / next open file, `+` / `-` / `0` for zoom, `o` to open files, `e` /
-`Esc` to edit / read, and `⌘S` / `Ctrl+S` to save.
+`Esc` to edit / read, `t` for the formatting toolbar, and `⌘S` / `Ctrl+S` to
+save.
 
 **What it sends over the network.** Your files never leave your computer. They
 are read and rendered inside the page and uploaded nowhere. The page does fetch
