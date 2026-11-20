@@ -32,11 +32,12 @@ async function main() {
     const waitFor = (expr, ms = 10000, what = expr) => evaluate(`(async () => { ${PAGE_WAIT}
       return await wait(async () => ${expr}, ${ms}); })()`).then((v) => { assert.ok(v, 'timed out waiting for ' + what); return v; });
 
-    // md.wtvr.sh: a page that says where it is.
+    // md.wtvr.sh: a page that says where it is. Only page loads are recorded:
+    // some Chromium builds also ask it for /favicon.ico.
     const arrivals = [];
     await send('Fetch.enable', { patterns: [{ urlPattern: 'https://md.wtvr.sh/*' }] });
     b.on('Fetch.requestPaused', (p) => {
-      arrivals.push(p.request.url);
+      if (p.resourceType === 'Document') arrivals.push(p.request.url);
       send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200,
         responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
         body: Buffer.from('<!doctype html><title>md.wtvr.sh</title>new home').toString('base64') });
