@@ -289,9 +289,9 @@ desktop app doesn't run. Two ways to get it:
 What you get:
 
 - **Many files in one tab.** Every open file gets a row in the sidebar. Open
-  files or a whole folder with the buttons or `o`, drop them onto the page, or
-  paste Markdown text. When you open a folder, relative images and links between
-  its files work.
+  files or a whole folder with the buttons or `o`, drop them onto the page,
+  paste Markdown text, or start a new file with **New file** or `n`. When you
+  open a folder, relative images and links between its files work.
 - **Everything the app renders:** tables, task lists, footnotes, front matter,
   math (MathJax, with the app's settings), and every theme in light and dark,
   picked in the sidebar.
@@ -339,6 +339,11 @@ undo history while you switch between files. `Tab` inserts two spaces;
   Brave and Arc. The first save of each file asks for permission to write to
   it. `⌘⇧S` / `Ctrl+Shift+S` saves to a new file instead, which the document
   then refers to.
+- **A new file** (**New file** in the sidebar, or `n`) opens empty, in Edit
+  mode. Its first save asks where to put it, suggesting a name made from its
+  first heading, and from then on it's that file. In Safari and Firefox, Save
+  downloads it under that name. A new file you didn't type in closes without
+  asking.
 - **Safari and Firefox** don't let a page write to your files, so there **Save**
   becomes **Download** and saves a copy to your downloads folder; the original
   file stays as it was. The first time you edit a file there, a note says so.
@@ -402,9 +407,9 @@ it, edit it and save their own copy.
   network.
 
 Keys are the app's (`j`/`k`, `Space`, `g`/`G`, `r`) plus `[` / `]` for the
-previous / next open file, `+` / `-` / `0` for zoom, `o` to open files, `e` /
-`Esc` to edit / read, `t` for the formatting toolbar, and `⌘S` / `Ctrl+S` to
-save.
+previous / next open file, `+` / `-` / `0` for zoom, `o` to open files, `n`
+for a new file, `e` / `Esc` to edit / read, `t` for the formatting toolbar, and
+`⌘S` / `Ctrl+S` to save.
 
 **What it sends over the network.** Your files never leave your computer. They
 are read and rendered inside the page and uploaded nowhere, unless you

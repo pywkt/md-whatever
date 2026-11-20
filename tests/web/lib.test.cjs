@@ -69,6 +69,16 @@ test('document titles for the sidebar', () => {
   assert.equal(lib.titleOf('    # indented code, not a heading\n'), '');
 });
 
+test('file names for new files, from their title', () => {
+  assert.equal(lib.fileNameFor('Trip notes: May!'), 'trip-notes-may.md');
+  assert.equal(lib.fileNameFor('  Ünïcode & 日本語 '), 'ünïcode-日本語.md');
+  assert.equal(lib.fileNameFor('../../etc/passwd'), 'etc-passwd.md');
+  assert.equal(lib.fileNameFor('x'.repeat(80)), 'x'.repeat(60) + '.md');
+  assert.equal(lib.fileNameFor(`${'a'.repeat(59)} b`), 'a'.repeat(59) + '.md'); // no trailing dash
+  assert.equal(lib.fileNameFor('?!'), 'untitled.md');
+  assert.equal(lib.fileNameFor('', 'untitled-3.md'), 'untitled-3.md');
+});
+
 /* ---------- saving gives back the bytes that were read ---------- */
 
 const fs = require('node:fs');

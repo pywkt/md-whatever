@@ -10,6 +10,7 @@ This file is a sample. It closes by itself when you open your first file.
 - **Open folder** adds every Markdown file inside the folder. Relative images and links between those files then work.
 - **Drop** files or a folder anywhere on the page.
 - **Paste** Markdown text to read it without saving it first.
+- **New file** in the sidebar, or `n`, starts an empty one to write in.
 
 Files are read and rendered inside this page. Nothing you open is uploaded anywhere, unless you share it (below). The page itself and the libraries for code colors and math do come from the web, and are kept for offline use once fetched. Images from the web stay off unless you turn on "Load images from the web".
 
@@ -33,6 +34,7 @@ At [md.wtvr.sh](https://md.wtvr.sh/) you can install the reader, and it then wor
 | `+` / `-` / `0` | zoom in / out / reset |
 | `r` | reload the current file from disk |
 | `o` | open files |
+| `n` | new file |
 | `e` / `Esc` | edit the source / back to reading |
 | `t` | formatting toolbar |
 | `⌘S` / `Ctrl+S` | save |
@@ -50,7 +52,7 @@ What **Save** does depends on the browser:
 - **Chrome, Edge, Brave, Arc:** saves to the file you opened. The first save of each file asks for permission to write to it. `⌘⇧S` / `Ctrl+Shift+S` saves to a new file instead.
 - **Safari, Firefox:** these browsers can't write to your files, so Save downloads a copy, and the original file stays as it was.
 
-Saving keeps the file's line endings, encoding and byte order mark. If the file changes on disk while you have unsaved changes, you choose which version to keep. Samples like this page can be edited too, and saving one makes a new file.
+Saving keeps the file's line endings, encoding and byte order mark. If the file changes on disk while you have unsaved changes, you choose which version to keep. Samples like this page can be edited too, and saving one makes a new file. So does the first save of a new file, which suggests a name from its first heading.
 
 ## Share
 

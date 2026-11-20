@@ -9,7 +9,9 @@
 //     conflict bar offers both ways, and saving then asks first
 //   - a Latin-1 file stays Latin-1, and asks before becoming UTF-8
 //   - Save As of an untouched file gives back the same bytes
-//   - Safari and Firefox (no save picker): Save downloads a copy
+//   - New (n, or the button) starts an empty file in Edit mode; an untouched
+//     one closes without asking, and the first save names it from its heading
+//   - Safari and Firefox (no save picker): Save downloads a copy, a new file too
 //   - closing a file or the page with unsaved changes asks first
 //
 //   node tests/web/edit.cjs PAGE.html
@@ -56,10 +58,10 @@ async function main() {
 
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `
       Object.defineProperty(window, 'launchQueue', { configurable: true, value: { setConsumer(fn) { window.__launch = fn; } } });
-      // Save As: the picker can't be driven headless; it "picks" saved-as.md
+      // Save As: the picker can't be driven headless; it "picks" saved-as.md (or __pickName)
       window.showSaveFilePicker = async (opts) => {
         window.__pickerOpts = opts;
-        return (await navigator.storage.getDirectory()).getFileHandle('saved-as.md', { create: true });
+        return (await navigator.storage.getDirectory()).getFileHandle(window.__pickName || 'saved-as.md', { create: true });
       };
       window.__files = {
         async write(name, bytes) {
@@ -89,6 +91,7 @@ async function main() {
         bar: document.getElementById('bar-name').textContent,
         title: document.title,
         rail: [...document.querySelectorAll('#file-list .file-name')].map((n) => n.textContent),
+        meta: (document.querySelector('#file-list .is-active .file-meta') || {}).textContent || null,
         mode: document.getElementById('mode').textContent,
         save: shown('save') ? document.getElementById('save').textContent : null,
         conflict: shown('conflict') ? document.getElementById('conflict-text').textContent : null,
@@ -107,6 +110,7 @@ async function main() {
     const clearToast = () => evaluate(`(() => { const t = document.getElementById('toast'); t.hidden = true; t.textContent = ''; })()`);
     const press = {
       e: () => key('e', 'KeyE', 69),
+      n: () => key('n', 'KeyN', 78),
       esc: () => key('Escape', 'Escape', 27),
       tab: () => key('Tab', 'Tab', 9),
       save: () => clearToast().then(() => key('s', 'KeyS', 83, 2)), // Ctrl+S
@@ -259,6 +263,45 @@ async function main() {
     assert.equal(s.bar, 'saved-as.md');
     assert.ok(s.rail.includes('saved-as.md') && !s.rail.includes('mixed.md'));
 
+    step('n starts a new file in Edit mode; an untouched one closes without asking');
+    await press.esc();
+    takeDialogs(); // (the Latin-1 step's second save asked, and was answered yes)
+    await press.n();
+    s = await state();
+    assert.equal(s.bar, 'untitled.md');
+    assert.equal(s.meta, 'New file');
+    assert.equal(s.mode, 'Read', 'in Edit mode');
+    assert.equal(s.editor, '');
+    assert.ok(s.editorFocused, 'ready to type');
+    assert.equal(s.save, null, 'nothing to save yet');
+    await evaluate(`document.querySelector('#file-list .is-active .file-close').click()`);
+    assert.deepEqual(takeDialogs(), [], 'closed without asking');
+    assert.ok(!(await state()).rail.includes('untitled.md'));
+
+    step('the New button; the first save offers a name from the heading and makes it that file');
+    await evaluate(`document.getElementById('new-file').click()`);
+    assert.equal((await state()).bar, 'untitled-2.md');
+    await type('# Trip notes: May!\n\nPack.\n');
+    await waitFor(`document.title.startsWith('• ')`, 2000, 'dirty');
+    assert.equal((await state()).save, 'Save as…');
+    await evaluate(`window.__pickName = 'trip-notes-may.md'`);
+    await press.save();
+    await toastSays('Saved trip-notes-may.md');
+    assert.equal(await evaluate(`window.__pickerOpts.suggestedName`), 'trip-notes-may.md');
+    assert.deepEqual(await read('trip-notes-may.md'), utf8('# Trip notes: May!\n\nPack.\n'));
+    s = await state();
+    assert.equal(s.bar, 'trip-notes-may.md');
+    assert.equal(s.meta, 'Trip notes: May!', 'an ordinary file now');
+    assert.equal(s.save, null);
+    await type('More.\n');
+    await waitFor(`document.title.startsWith('• ')`, 2000, 'dirty');
+    assert.equal((await state()).save, 'Save', 'saves in place from now on');
+    await press.save();
+    await toastSays('Saved trip-notes-may.md');
+    assert.deepEqual(await read('trip-notes-may.md'), utf8('# Trip notes: May!\n\nPack.\nMore.\n'));
+    await evaluate(`window.__pickName = ''`);
+    await press.esc();
+
     step('Safari and Firefox: Save downloads a copy');
     await evaluate(`delete window.showSaveFilePicker`);
     await evaluate(`[...document.querySelectorAll('#file-list .file-main')].find((b) => b.textContent.includes('welcome.md')).click()`);
@@ -272,6 +315,16 @@ async function main() {
     for (let i = 0; i < 50 && !fs.existsSync(got); i++) await sleep(100);
     assert.ok(fs.readFileSync(got, 'utf8').startsWith('Hello # md-whatever, in a browser tab\n'));
     assert.equal((await state()).bar, 'welcome.md', 'downloaded: no longer marked unsaved');
+    await clearToast();
+    await press.n();
+    await type('# Hello there\n');
+    await waitFor(`document.title.startsWith('• ')`, 2000, 'dirty');
+    assert.equal((await state()).save, 'Download');
+    await evaluate(`document.getElementById('save').click()`);
+    await toastSays('Downloaded hello-there.md.');
+    const fresh = path.join(downloads, 'hello-there.md');
+    for (let i = 0; i < 50 && !fs.existsSync(fresh); i++) await sleep(100);
+    assert.equal(fs.readFileSync(fresh, 'utf8'), '# Hello there\n');
 
     assert.deepEqual(b.problems, [], 'page errors');
   } finally {

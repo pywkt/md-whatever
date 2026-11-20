@@ -95,6 +95,16 @@ function titleOf(text) {
   return m ? m[1].replace(/[*_`]/g, '').trim() : '';
 }
 
+// A file name for a title ("Trip notes: May!" -> "trip-notes-may.md"), or
+// fallback when nothing usable is left. Letters of any script are kept.
+function fileNameFor(title, fallback = 'untitled.md') {
+  const stem = String(title || '').toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, '');
+  return stem ? stem + '.md' : fallback;
+}
+
 /* ---------- file bytes <-> text, so saving gives back the file it read ---------- */
 
 // Browsers decode "iso-8859-1" as windows-1252, which puts 27 printable
@@ -860,7 +870,7 @@ function parseShareLink(href) {
 return {
   mix, paletteCss, scopeSelector, scopeCss,
   baseName, dirName, extOf, resolvePath, safeDecode, splitHref, hasScheme,
-  titleOf,
+  titleOf, fileNameFor,
   decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
   applyEdits, textDiff, wordAt, inlineOuter, toggleInline, setLink, removeLink,
   parseLine, blockAt, applyBlock, BLOCK_KINDS,

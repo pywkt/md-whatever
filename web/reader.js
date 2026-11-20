@@ -4,7 +4,7 @@
 const $ = (id) => document.getElementById(id);
 const DATA = JSON.parse($('mdw-data').textContent);
 const {
-  paletteCss, scopeCss, baseName, dirName, extOf, resolvePath, splitHref, hasScheme, titleOf,
+  paletteCss, scopeCss, baseName, dirName, extOf, resolvePath, splitHref, hasScheme, titleOf, fileNameFor,
   decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
   textDiff, inlineOuter, toggleInline, setLink, removeLink, blockAt, applyBlock,
   packShare, unpackShare, shareLink, parseShareLink,
@@ -171,6 +171,7 @@ let docs = [];
 let activeId = null;
 let seq = 0;
 let pasteCount = 0;
+let newCount = 0;
 const assets = new Map();       // images that came with the user's files: path -> { file, url }
 const sampleAssets = new Map(); // images bundled with the samples
 for (const [path, url] of Object.entries(DATA.assets)) sampleAssets.set(path, { url });
@@ -193,6 +194,7 @@ const sourceOf = (d) => (d.draft != null ? d.draft : d.text);
 function metaOf(d) {
   if (d.kind === 'sample') return 'Sample';
   if (d.kind === 'paste') return 'Pasted text';
+  if (d.kind === 'new') return 'New file';
   if (d.kind === 'shared') return d.expires ? 'Shared · expires ' + shortDate(d.expires) : 'Shared';
   if (!('title' in d)) d.title = titleOf(sourceOf(d));
   return [dirName(d.path), d.title].filter(Boolean).join(' · ');
@@ -908,6 +910,8 @@ async function save(d, { as = false } = {}) {
     out = encodeText(text, { encoding });
   }
   const blob = new Blob([out.bytes], { type: 'text/markdown' });
+  // A new file is offered a name from its first heading, if it has one.
+  const suggested = d.kind === 'new' ? fileNameFor(titleOf(text), d.name) : d.name;
   d.saving = true; // the live-reload check leaves the file alone meanwhile
   try {
     if (kind === 'inplace') {
@@ -923,7 +927,7 @@ async function save(d, { as = false } = {}) {
     } else if (kind === 'as') {
       let handle;
       try {
-        handle = await window.showSaveFilePicker({ suggestedName: d.name, types: MD_TYPES });
+        handle = await window.showSaveFilePicker({ suggestedName: suggested, types: MD_TYPES });
       } catch (err) {
         if (err && err.name === 'AbortError') return false;
         throw err;
@@ -933,7 +937,7 @@ async function save(d, { as = false } = {}) {
       Object.assign(d, { kind: 'file', handle, name: handle.name, path: handle.name });
       recent.add(handle);
     } else {
-      download(blob, d.name);
+      download(blob, suggested);
     }
     if (kind !== 'download') {
       const file = await d.handle.getFile();
@@ -950,7 +954,8 @@ async function save(d, { as = false } = {}) {
     if (d.editor) syncDraft(d); // typing during the save leaves it dirty again
     renderRail();
     renderBar();
-    toast(kind === 'download' ? `Downloaded ${d.name}. The original file is unchanged.` : `Saved ${d.name}.`);
+    toast(kind !== 'download' ? `Saved ${d.name}.`
+      : d.kind === 'file' ? `Downloaded ${d.name}. The original file is unchanged.` : `Downloaded ${suggested}.`);
     return true;
   } catch (err) {
     toast(`Could not save ${d.name}: ${(err && err.message) || err}`);
@@ -1575,6 +1580,17 @@ function openText(text) {
   activateDoc(d.id);
 }
 
+// A new, empty document, in Edit mode. It has no file until it's saved.
+function newDoc() {
+  const n = ++newCount;
+  const d = makeDoc({ name: n === 1 ? 'untitled.md' : `untitled-${n}.md`, kind: 'new' });
+  docs = docs.filter((x) => x.kind !== 'sample' || x.dirty);
+  docs.push(d);
+  activateDoc(d.id);
+  if (narrow.matches) setRail(false);
+  setEditing(d, true);
+}
+
 function openSample(name, opts = {}) {
   const key = Object.keys(DATA.samples).find((k) => k.toLowerCase() === name.toLowerCase());
   if (!key) return null;
@@ -2196,6 +2212,7 @@ function bind() {
   });
 
   for (const id of ['open-files', 'empty-open-files']) $(id).addEventListener('click', pickFiles);
+  for (const id of ['new-file', 'empty-new-file']) $(id).addEventListener('click', newDoc);
   $('mode').addEventListener('click', () => { const d = current(); if (d) setEditing(d, !d.editing); });
   $('save').addEventListener('click', () => save(current()));
   $('conflict-reload').addEventListener('click', () => { const d = current(); if (d) reloadFromDisk(d); });
@@ -2337,6 +2354,7 @@ function bind() {
       case '0': setZoom(1); break;
       case 'r': reloadCurrent(); break;
       case 'o': pickFiles(); break;
+      case 'n': newDoc(); break;
       case 'Escape': if (narrow.matches) setRail(false); return;
       default: return;
     }
