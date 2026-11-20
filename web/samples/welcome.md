@@ -11,13 +11,13 @@ This file is a sample. It closes by itself when you open your first file.
 - **Drop** files or a folder anywhere on the page.
 - **Paste** Markdown text to read it without saving it first.
 
-Files are read and rendered inside this page. Nothing you open is uploaded anywhere. The page itself and the libraries for code colors and math do come from the web, and are kept for offline use once fetched. Images from the web stay off unless you turn on "Load images from the web".
+Files are read and rendered inside this page. Nothing you open is uploaded anywhere, unless you share it (below). The page itself and the libraries for code colors and math do come from the web, and are kept for offline use once fetched. Images from the web stay off unless you turn on "Load images from the web".
 
 In Chrome, Edge, Brave or Arc, files you opened are listed under **Recent** in the sidebar, so you can open them again next time with one click.
 
 ## Use it like an app
 
-At [pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/) you can install the reader, and it then works offline too:
+At [md.wtvr.sh](https://md.wtvr.sh/) you can install the reader, and it then works offline too:
 
 - **Chrome, Edge, Brave:** click the install button at the right of the address bar. On a Mac, Markdown files then offer md-whatever under **Open With** in Finder. Choose it in **Get Info → Open with → Change All** to make it the default.
 - **Safari** (macOS Sonoma or later): **File → Add to Dock**. Safari apps can't be picked in Open With, so drop files onto the window instead.
@@ -51,6 +51,10 @@ What **Save** does depends on the browser:
 - **Safari, Firefox:** these browsers can't write to your files, so Save downloads a copy, and the original file stays as it was.
 
 Saving keeps the file's line endings, encoding and byte order mark. If the file changes on disk while you have unsaved changes, you choose which version to keep. Samples like this page can be edited too, and saving one makes a new file.
+
+## Share
+
+On [md.wtvr.sh](https://md.wtvr.sh/), the share button in the top bar (next to **A**) turns the open file into a link that works for 1, 7 or 30 days. The file is encrypted in your browser first, and the key is the end of the link after the `#`, which never leaves the browser, so only people with the link can read it. A link shows the file as it was when you made it; **Stop sharing** deletes it.
 
 ## What carries over from the desktop app
 

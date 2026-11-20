@@ -22,7 +22,7 @@ mdw notes.md
 ```
 
 Not on Linux? The same engine and themes also run in a browser tab:
-**[pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/)**. See
+**[md.wtvr.sh](https://md.wtvr.sh/)**. See
 [The web reader](#the-web-reader).
 
 ---
@@ -153,7 +153,7 @@ saves you some time.
 ## Install
 
 **On macOS, Windows or another system:** there's nothing to install. Open
-[pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/), and see
+[md.wtvr.sh](https://md.wtvr.sh/), and see
 [The web reader](#the-web-reader) for making it an app.
 
 On **Arch Linux** or anything based on it (EndeavourOS, Manjaro, …):
@@ -276,8 +276,11 @@ The same Markdown engine, compiled to WebAssembly, in a single HTML page,
 styled by the same theme files. It's for macOS, Windows, or anywhere else the
 desktop app doesn't run. Two ways to get it:
 
-- **Hosted:** [pywkt.github.io/md-whatever](https://pywkt.github.io/md-whatever/).
-  You can install it as an app, and it then works offline.
+- **Hosted:** [md.wtvr.sh](https://md.wtvr.sh/).
+  You can install it as an app, and it then works offline. (It used to live at
+  pywkt.github.io/md-whatever, which now sends you here. Recent files and
+  settings stay with the old address, so an app installed from there needs
+  installing again.)
 - **One file:** `md-whatever.html`, attached to each tagged
   [release](https://github.com/pywkt/md-whatever/releases), or built by you (see
   [Building by hand](#building-by-hand)). Save it anywhere and open it in a
@@ -298,6 +301,8 @@ What you get:
   [Editing in the browser](#editing-in-the-browser).
 - **Live reload**, and **Recent** files in the sidebar, in the browsers that
   allow it (below).
+- **Sharing** a file as a link, encrypted so only people with the link can read
+  it (hosted version). See [Sharing a file](#sharing-a-file).
 
 What works depends on the browser, because browsers differ in what they let a
 page do with your files:
@@ -374,16 +379,40 @@ select some text (or click into a paragraph) and use a button.
   After formatting in the rendered page, the source editor's own undo history
   starts again.
 
+### Sharing a file
+
+On [md.wtvr.sh](https://md.wtvr.sh/), the share button in the top bar makes a
+link to the open file, like `https://md.wtvr.sh/are/k3J9x2Hq7v#Tb8kQ2vX9mLpR4sN7wYc1A`.
+Pick how long it works (1 day, 7 days or 30 days), press **Create link**, and
+send it to anyone. Opening it shows the file in the reader, where they can read
+it, edit it and save their own copy.
+
+- **It's encrypted in your browser** before it's uploaded. The key is the part
+  of the link after the `#`, which browsers never send to a server, so the copy
+  stored on md.wtvr.sh can't be read without the link, not even by md.wtvr.sh.
+  Whoever has the link can read the file, so share it like you'd share the file.
+- **A link is a snapshot** of the file as it was when you made it, including
+  unsaved changes. Change the file later and the share panel says so and offers
+  a new link.
+- **Stop sharing** deletes the copy straight away. Only the browser that made
+  the link can do that. Otherwise it's deleted when it expires.
+- Only the Markdown text is shared, up to 1 MB compressed (several MB of text).
+  Images and links to other files in its folder don't come along.
+- The single-file `md-whatever.html` has no share button: it never touches the
+  network.
+
 Keys are the app's (`j`/`k`, `Space`, `g`/`G`, `r`) plus `[` / `]` for the
 previous / next open file, `+` / `-` / `0` for zoom, `o` to open files, `e` /
 `Esc` to edit / read, `t` for the formatting toolbar, and `⌘S` / `Ctrl+S` to
 save.
 
 **What it sends over the network.** Your files never leave your computer. They
-are read and rendered inside the page and uploaded nowhere. The page does fetch
-some things:
+are read and rendered inside the page and uploaded nowhere, unless you
+[share one](#sharing-a-file): then an encrypted copy of that one file goes to
+md.wtvr.sh. The page does fetch some things:
 
-- the hosted page itself, from GitHub Pages;
+- the hosted page itself, from md.wtvr.sh (on Cloudflare);
+- a shared file, encrypted, when you open a share link;
 - [highlight.js](https://highlightjs.org/) (code colors) from cdnjs and MathJax
   (math) from jsDelivr, only when a document has code or math. The hosted
   page keeps them for offline use once fetched. Without them, code is plain and math
@@ -513,10 +542,14 @@ into `build/web/md-whatever.html` (the single-file page) and `build/web/site/`
 `-DMDW_DESKTOP=OFF` builds only the web reader, without Qt. Its browser tests
 run in headless Chromium with the network blocked, and are skipped if Chromium
 isn't found (`MDW_CHROMIUM=/path/to/chromium` points them at one). To try the
-hosted version locally, serve the site folder, for example with
-`python3 -m http.server -d build/web/site`. The built page is published, never
-committed: [`.github/workflows/web.yml`](.github/workflows/web.yml) deploys it
-to GitHub Pages from `main` and attaches it to releases.
+hosted version locally, run `npm install` once in `share/`, then `npm run dev`
+there: [Wrangler](https://developers.cloudflare.com/workers/wrangler/) serves
+the site folder with sharing (a local stand-in for its storage) at
+`http://127.0.0.1:8787`. `share/` is the Cloudflare Worker behind md.wtvr.sh:
+it serves `build/web/site` and stores shared files. The built page is published,
+never committed: [`.github/workflows/web.yml`](.github/workflows/web.yml)
+deploys the Worker and the site from `main` and attaches the single file to
+releases.
 
 Layout: `src/markdown.cpp` turns Markdown into HTML (plain C++, no Qt),
 `src/document.cpp` assembles the page, `src/math.cpp` talks to the MathJax

@@ -2362,6 +2362,11 @@ async function start() {
   const link = hosted && parseShareLink(location.href);
   if (link) await openShared(link); // a share link shows that file (or why it can't) instead of the welcome page
   else openSample('welcome.md');
+  if (hosted && new URLSearchParams(location.search).has('moved')) {
+    // sent here from the old address, pywkt.github.io/md-whatever (web/moved/)
+    history.replaceState(null, '', location.pathname + location.hash);
+    toast(`md-whatever moved to ${location.host}. Recent files and settings start fresh here; you can install it again from this address.`, 12000);
+  }
   acceptLaunches(); // files from a launch replace the welcome page, as any opened file does
   recent.load();
   serviceWorker();

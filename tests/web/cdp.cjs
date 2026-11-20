@@ -115,7 +115,7 @@ async function launch({ offline = false } = {}) {
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json',
   '.png': 'image/png', '.svg': 'image/svg+xml' };
 
-// A static server like GitHub Pages, for one directory, on 127.0.0.1 (a secure
+// A plain static server, for one directory, on 127.0.0.1 (a secure
 // context, unlike file://). Pass the port of an earlier server to keep the page's
 // origin, and with it its storage.
 function serve(dir, port = 0) {

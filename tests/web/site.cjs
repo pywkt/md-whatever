@@ -1,4 +1,4 @@
-// The hosted web reader (build/web/site, what GitHub Pages serves), on a local
+// The hosted web reader (build/web/site, what md.wtvr.sh serves), on a local
 // server in headless Chromium:
 //   - the manifest loads and Chromium finds nothing that blocks installing it
 //   - the service worker takes over, and the page then opens with the server gone

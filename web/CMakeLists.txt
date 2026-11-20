@@ -1,8 +1,9 @@
 # The web reader: one self-contained HTML page (build/web/md-whatever.html) with
 # md-whatever's Markdown engine compiled to WebAssembly, plus a JavaScript
 # translation of it for browsers that block wasm; and build/web/site/, the same
-# page with a manifest, service worker and icons for GitHub Pages. Published
-# (Pages, Releases; see .github/workflows/web.yml), never committed.
+# page with a manifest, service worker and icons, served at md.wtvr.sh by the
+# Worker in share/. Published (md.wtvr.sh, Releases; see
+# .github/workflows/web.yml), never committed.
 #
 #   -DMDW_WEB_READER=AUTO  build it if the tools below are installed (default)
 #                    ON    the same, but stop with an error if they aren't
@@ -188,6 +189,9 @@ if(MDW_NODE)
   # Sharing: the site served through the real Worker (share/worker.js).
   add_test(NAME web-share COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/share.cjs ${_o}/site)
   set_tests_properties(web-share PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  # The old address after the move (web/moved/): installed copies go to md.wtvr.sh.
+  add_test(NAME web-moved COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/moved.cjs ${_o}/site ${CMAKE_SOURCE_DIR}/web/moved)
+  set_tests_properties(web-moved PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   # Editing: modes, saving in place byte for byte, conflicts, downloads.
   add_test(NAME web-edit COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/edit.cjs ${_o}/md-whatever.html)
   set_tests_properties(web-edit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
