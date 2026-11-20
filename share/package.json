@@ -1,0 +1,13 @@
+{
+  "name": "mdw-share",
+  "private": true,
+  "description": "The Cloudflare Worker behind md.wtvr.sh: serves the web reader and stores shared files",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.165.0"
+  }
+}

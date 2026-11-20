@@ -1,0 +1,41 @@
+// The Worker behind md.wtvr.sh: the web reader's files (built into
+// build/web/site by cmake) and shared files (R2). See worker.js.
+//   npm run dev       local, with a local R2 (build the site first)
+//   npm run deploy    (CI does this from main; see .github/workflows/web.yml)
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mdw",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    "directory": "../build/web/site",
+    "binding": "ASSETS",
+    // /are/<id> and other unknown paths get the page (index.html)
+    "not_found_handling": "single-page-application",
+    // the Worker sees every request: wtvr.sh's redirect, the API, the page's headers
+    "run_worker_first": true
+  },
+  "routes": [
+    { "pattern": "md.wtvr.sh", "custom_domain": true },
+    { "pattern": "wtvr.sh", "custom_domain": true }
+  ],
+  "workers_dev": false,
+  "vars": {
+    "APP_ORIGIN": "https://md.wtvr.sh",
+    // 302 to APP_ORIGIN, path and query kept (browsers keep the #part)
+    "REDIRECT_HOSTS": "wtvr.sh"
+  },
+  "r2_buckets": [
+    { "binding": "SHARES", "bucket_name": "mdw-shares" }
+  ],
+  "ratelimits": [
+    // per IP address
+    { "name": "CREATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "READ_LIMIT", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "triggers": {
+    // deletes expired shares once a day
+    "crons": ["17 4 * * *"]
+  },
+  "observability": { "enabled": true }
+}

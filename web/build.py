@@ -7,9 +7,9 @@
 --wasm     the engine compiled to WebAssembly (web/engine.cpp + markdown.cpp + md4c)
 --asm      wasm2js's translation of the same module (the JavaScript fallback)
 --out      the single-file page (GitHub Releases, or double-click to open)
---site     also write the hosted version (GitHub Pages): index.html, the same
-           page linked to a manifest (install, open from Finder), sw.js (offline)
-           and icons
+--site     also write the hosted version (md.wtvr.sh, served from the site's
+           root): index.html, the same page linked to a manifest (install,
+           open from Finder), sw.js (offline) and icons
 --asm-out  also write the fallback as inlined in the page, for tests/web
 
 Everything else comes from the repository: the page and its code in web/,
@@ -42,9 +42,11 @@ ICONS = ['icon.svg', 'icon-192.png', 'icon-512.png', 'maskable-512.png', 'apple-
 
 # What @@HEAD@@ becomes: the hosted site links its manifest and icon files; the
 # single file can't rely on files next to it, so it carries its icon inline.
-SITE_HEAD = """<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">"""
+# From the root, not relative: the same page is served for share links
+# (/are/<id>), where a relative path would point under /are/.
+SITE_HEAD = """<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">"""
 
 
 def fail(msg):

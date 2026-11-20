@@ -19,6 +19,8 @@ set(MDW_WASI_SYSROOT /usr/share/wasi-sysroot CACHE PATH "WASI sysroot (wasi-libc
 find_program(MDW_NODE node)
 if(MDW_NODE)
   add_test(NAME web-lib COMMAND ${MDW_NODE} --test ${CMAKE_SOURCE_DIR}/tests/web/lib.test.cjs)
+  # The Worker behind md.wtvr.sh (share/), with fake Cloudflare bindings.
+  add_test(NAME share-worker COMMAND ${MDW_NODE} --test ${CMAKE_SOURCE_DIR}/tests/share/worker.test.mjs)
 endif()
 
 string(TOUPPER "${MDW_WEB_READER}" _mode)
@@ -183,6 +185,9 @@ if(MDW_NODE)
   # The hosted version on a local server: install, offline, Recent, launches.
   add_test(NAME web-site COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/site.cjs ${_o}/site)
   set_tests_properties(web-site PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  # Sharing: the site served through the real Worker (share/worker.js).
+  add_test(NAME web-share COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/share.cjs ${_o}/site)
+  set_tests_properties(web-share PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   # Editing: modes, saving in place byte for byte, conflicts, downloads.
   add_test(NAME web-edit COMMAND ${MDW_NODE} ${CMAKE_SOURCE_DIR}/tests/web/edit.cjs ${_o}/md-whatever.html)
   set_tests_properties(web-edit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)

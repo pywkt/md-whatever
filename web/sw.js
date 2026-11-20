@@ -1,4 +1,4 @@
-// Service worker for the hosted web reader (https://pywkt.github.io/md-whatever/),
+// Service worker for the hosted web reader (https://md.wtvr.sh/),
 // so it opens and works offline. web/build.py fills in VERSION (a hash of the
 // files below) and PRECACHE; a new build means a new sw.js, which the browser
 // installs in the background. It takes over only once every md-whatever window
@@ -57,7 +57,9 @@ self.addEventListener('fetch', (event) => {
   if (CDN_PREFIXES.some((p) => url.startsWith(p))) {
     event.respondWith(fromCdn(request));
   } else if (new URL(url).origin === self.location.origin) {
-    // Every page address (?query, index.html) is the one page.
+    // Shared files (/api/shares/...) always come from the server.
+    if (new URL(url).pathname.startsWith('/api/')) return;
+    // Every page address (?query, index.html, share links /are/<id>) is the one page.
     const page = request.mode === 'navigate' ? new URL('./', self.registration.scope).href : null;
     event.respondWith(caches.open(SITE_CACHE)
       .then((cache) => cache.match(page || request, { ignoreSearch: true }))

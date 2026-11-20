@@ -8,3 +8,7 @@ compile_commands.json
 /spikes/
 /resources/
 *.bundle
+
+# The Worker's tools and local state
+/share/node_modules/
+/share/.wrangler/

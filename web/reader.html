@@ -98,6 +98,9 @@
       <button class="icon-btn" id="format-toggle" type="button" aria-pressed="false" aria-controls="format" title="Formatting toolbar (t)" aria-label="Formatting toolbar" hidden>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13.5 5.6 3h.8L10 13.5M3.3 9.8h5.4"/><path d="M11 13.5h3.5"/></svg>
       </button>
+      <button class="icon-btn" id="share" type="button" aria-expanded="false" aria-controls="share-panel" title="Share as a link" aria-label="Share as a link" hidden>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 10V1.8M5 4.6 8 1.6l3 3"/><path d="M5.5 6.5H4a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 4 14.5h8a1.5 1.5 0 0 0 1.5-1.5V8A1.5 1.5 0 0 0 12 6.5h-1.5"/></svg>
+      </button>
       <button class="btn bar-btn" id="mode" type="button" hidden>Edit</button>
       <div class="zoom" role="group" aria-label="Text size">
         <button class="icon-btn" id="zoom-out" type="button" aria-label="Smaller text" title="Smaller text (-)">−</button>
@@ -159,6 +162,25 @@
         <button class="btn" type="button" id="fmt-unlink">Remove link</button>
         <button class="icon-btn" type="button" id="fmt-link-cancel" aria-label="Cancel">×</button>
       </form>
+    </div>
+    <div class="share-bar" id="share-panel" role="region" aria-label="Share as a link" hidden>
+      <div class="share-row" id="share-made" hidden>
+        <input type="text" id="share-link" readonly spellcheck="false" aria-label="Link to share">
+        <button class="btn" id="share-copy" type="button">Copy</button>
+        <span class="share-expires" id="share-expires"></span>
+        <button class="btn" id="share-stop" type="button">Stop sharing</button>
+      </div>
+      <div class="share-row" id="share-new">
+        <label for="share-days"><span id="share-lead">Share </span><b id="share-name"></b><span id="share-tail"> as a link that expires after</span></label>
+        <select id="share-days">
+          <option value="1">1 day</option>
+          <option value="7" selected>7 days</option>
+          <option value="30">30 days</option>
+        </select>
+        <button class="btn" id="share-create" type="button">Create link</button>
+      </div>
+      <p class="share-note" id="share-note" aria-live="polite"></p>
+      <button class="icon-btn share-close" id="share-close" type="button" aria-label="Close">×</button>
     </div>
     <div class="notice" id="conflict" role="alert" hidden>
       <span id="conflict-text"></span>

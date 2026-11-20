@@ -124,6 +124,7 @@ async function main() {
     assert.equal(await art(`art.querySelectorAll('[data-s]').length`), 0, 'no source map without the toolbar');
     await evaluate(`window.__files.launch('notes.md', ${JSON.stringify(utf8(NOTES))})`);
     await waitFor(`document.getElementById('bar-name').textContent === 'notes.md'`);
+    assert.equal(await evaluate(`document.getElementById('share').hidden`), true, 'no Share in the single-file page');
     await press.t();
     await waitFor(`!document.getElementById('format').hidden`, 2000, 'the toolbar');
     assert.equal(await evaluate(`document.getElementById('format-toggle').getAttribute('aria-pressed')`), 'true');

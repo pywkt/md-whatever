@@ -1,6 +1,7 @@
 // md-whatever web reader: pure helpers (no DOM, no page state).
 // Inlined into the page before reader.js, and loaded by the node tests in
-// tests/web/. Keep everything here free of `document`, `window` and globals.
+// tests/web/. Keep everything here free of `document`, `window` and globals
+// (platform APIs that node has too, like crypto and streams, are fine).
 const mdwLib = (() => {
 'use strict';
 
@@ -733,6 +734,129 @@ function applyBlock(text, a, b, kind) {
   return done();
 }
 
+/* ---------- sharing: the encrypted file and its link ---------- */
+
+// A shared file is JSON { v, name, text }, gzipped, then encrypted with AES-GCM
+// under a fresh 128-bit key: bytes = 12-byte IV, then the ciphertext and tag.
+// The key travels only in the link's #fragment, which browsers never send to a
+// server, so md.wtvr.sh stores bytes it can't read. WebCrypto and
+// CompressionStream are platform APIs: every current browser has them, and so
+// does node.
+//
+//   https://md.wtvr.sh/are/<id>#<key>
+//   id: 10 characters [0-9A-Za-z] (made by the server), key: 22 base64url
+
+const SHARE_VERSION = 1;
+const SHARE_MAX_TEXT = 20 * 1024 * 1024; // unzipped; the reader opens files up to this size
+
+class ShareError extends Error {
+  // code: 'damaged' (wrong key, cut short, not ours) or 'version' (a newer reader made it)
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+function toBase64url(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64url(s) {
+  if (!/^[A-Za-z0-9_-]*$/.test(s)) return null;
+  try {
+    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  } catch (err) {
+    return null;
+  }
+}
+
+// All of a stream's bytes; past `limit`, throws instead (a zip bomb stops there).
+async function readAll(stream, limit = Infinity) {
+  const chunks = [];
+  let size = 0;
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > limit) {
+      reader.cancel().catch(() => {});
+      throw new RangeError('too big');
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}
+
+const viaStream = (bytes, transform, limit) => readAll(new Blob([bytes]).stream().pipeThrough(transform), limit);
+
+// { name, text } -> { bytes, key }: what to upload, and the key for the link.
+async function packShare({ name, text }) {
+  const plain = new TextEncoder().encode(JSON.stringify({ v: SHARE_VERSION, name, text }));
+  const zipped = await viaStream(plain, new CompressionStream('gzip'));
+  const raw = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt']);
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, zipped));
+  const bytes = new Uint8Array(iv.length + sealed.length);
+  bytes.set(iv);
+  bytes.set(sealed, iv.length);
+  return { bytes, key: toBase64url(raw) };
+}
+
+// The reverse; throws a ShareError when the bytes and key don't make a file.
+async function unpackShare(bytes, keyText) {
+  const raw = fromBase64url(keyText || '');
+  if (!raw || raw.length !== 16 || bytes.length < 12 + 16) throw new ShareError('damaged', 'The link or the shared file is damaged.');
+  let plain;
+  try {
+    const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    const zipped = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.subarray(0, 12) }, key, bytes.subarray(12));
+    plain = await viaStream(new Uint8Array(zipped), new DecompressionStream('gzip'), SHARE_MAX_TEXT * 3 + 1024);
+  } catch (err) {
+    throw new ShareError('damaged', 'The link or the shared file is damaged.');
+  }
+  let data;
+  try {
+    data = JSON.parse(new TextDecoder().decode(plain));
+  } catch (err) {
+    throw new ShareError('damaged', 'The shared file is damaged.');
+  }
+  if (!data || typeof data !== 'object' || !Number.isInteger(data.v)) throw new ShareError('damaged', 'The shared file is damaged.');
+  if (data.v > SHARE_VERSION) throw new ShareError('version', 'This file was shared from a newer version of md-whatever. Reload to update.');
+  if (typeof data.text !== 'string') throw new ShareError('damaged', 'The shared file is damaged.');
+  const name = typeof data.name === 'string' && data.name.trim() ? baseName(data.name.trim()) : 'shared.md';
+  return { name, text: data.text };
+}
+
+const shareLink = (origin, id, key) => `${origin.replace(/\/+$/, '')}/are/${id}#${key}`;
+
+// A page address -> { id, key } when it's a share link (either may be null when
+// that part is missing or mangled), else null. Punctuation a chat app glued to
+// the end ("...#key)." ) is ignored.
+function parseShareLink(href) {
+  let url;
+  try {
+    url = new URL(href);
+  } catch (err) {
+    return null;
+  }
+  const path = /^\/are\/([^/]*)\/?$/.exec(url.pathname);
+  if (!path) return null;
+  const id = /^[0-9A-Za-z]{10}$/.test(path[1]) ? path[1] : null;
+  const k = /^#([A-Za-z0-9_-]{22})[^A-Za-z0-9_-]*$/.exec(url.hash);
+  return { id, key: k ? k[1] : null };
+}
+
 return {
   mix, paletteCss, scopeSelector, scopeCss,
   baseName, dirName, extOf, resolvePath, safeDecode, splitHref, hasScheme,
@@ -740,6 +864,7 @@ return {
   decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
   applyEdits, textDiff, wordAt, inlineOuter, toggleInline, setLink, removeLink,
   parseLine, blockAt, applyBlock, BLOCK_KINDS,
+  SHARE_VERSION, ShareError, toBase64url, fromBase64url, packShare, unpackShare, shareLink, parseShareLink,
 };
 })();
 

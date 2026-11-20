@@ -7,6 +7,7 @@ const {
   paletteCss, scopeCss, baseName, dirName, extOf, resolvePath, splitHref, hasScheme, titleOf,
   decodeBytes, encodeText, normalizeNewlines, lineEnding, withLineEnding,
   textDiff, inlineOuter, toggleInline, setLink, removeLink, blockAt, applyBlock,
+  packShare, unpackShare, shareLink, parseShareLink,
 } = mdwLib; // web/lib.js
 
 // Same list as kMarkdownSuffixes in md-whatever's mainwindow.cpp.
@@ -192,6 +193,7 @@ const sourceOf = (d) => (d.draft != null ? d.draft : d.text);
 function metaOf(d) {
   if (d.kind === 'sample') return 'Sample';
   if (d.kind === 'paste') return 'Pasted text';
+  if (d.kind === 'shared') return d.expires ? 'Shared · expires ' + shortDate(d.expires) : 'Shared';
   if (!('title' in d)) d.title = titleOf(sourceOf(d));
   return [dirName(d.path), d.title].filter(Boolean).join(' · ');
 }
@@ -531,6 +533,7 @@ function activateDoc(id, opts = {}) {
   }
   host.hidden = false;
   emptyEl.hidden = true;
+  restoreEmptyMessage();
   showDoc(d);
   if (!d.editing) host.scrollTop = d.scroll;
   if (opts.anchor) scrollToAnchor(d, opts.anchor);
@@ -617,6 +620,8 @@ function renderBar() {
   fmt.setAttribute('aria-pressed', String(prefs.toolbar));
   $('format').hidden = !(d && prefs.toolbar);
   if (!d || !prefs.toolbar) $('fmt-link').hidden = true;
+  $('share').hidden = !(hosted && d);
+  if (sharePanelFor && (!d || d.id !== sharePanelFor)) renderSharePanel(); // another document: close it
   const save = $('save');
   save.hidden = !(d && d.dirty);
   if (d) {
@@ -1812,6 +1817,259 @@ const recent = (() => {
   return { load, add, clear };
 })();
 
+/* ---------- sharing (hosted version): links to an encrypted copy, md.wtvr.sh/are/<id>#<key> ---------- */
+
+// The file is encrypted here (lib.js packShare) and only the encrypted bytes go
+// to the server (share/worker.js); the key is in the link's #part, which never
+// leaves the browser. A link is a snapshot of the document as it was then.
+// Each document remembers its link (d.share) and, for Stop sharing after a
+// reload, so does this browser: localStorage, by document, with the delete token.
+
+const SHARE_MAX = 1024 * 1024; // the server's limit for the encrypted file
+const SHARES_KEY = 'mdw-shares';
+const hosted = /^https?:$/.test(location.protocol) && !!document.querySelector('link[rel="manifest"]');
+let sharePanelFor = null; // the document the panel is open for
+
+const shareKeyOf = (d) => `${d.kind}:${d.path || d.name}`;
+const shortDate = (iso) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+async function digestOf(text) {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function loadShares() {
+  try {
+    const all = JSON.parse(localStorage.getItem(SHARES_KEY) || '[]');
+    return Array.isArray(all) ? all.filter((s) => s && Date.parse(s.expires) > Date.now()) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function storeShares(list) {
+  try { localStorage.setItem(SHARES_KEY, JSON.stringify(list)); } catch (err) { /* private window: this session only */ }
+}
+
+function rememberShare(d) {
+  const list = loadShares().filter((s) => s.id !== d.share.id);
+  list.push({ ...d.share, doc: shareKeyOf(d) });
+  storeShares(list.slice(-200));
+}
+
+function forgetShare(id) {
+  storeShares(loadShares().filter((s) => s.id !== id));
+}
+
+// The link this document was last shared with, if it's still live.
+function shareOf(d) {
+  if (d.share && Date.parse(d.share.expires) <= Date.now()) d.share = null;
+  if (!d.share) {
+    const mine = loadShares().filter((s) => s.doc === shareKeyOf(d));
+    if (mine.length) {
+      const { doc, ...share } = mine[mine.length - 1];
+      d.share = share;
+    }
+  }
+  return d.share;
+}
+
+function shareNote(text, isError = false) {
+  const note = $('share-note');
+  note.textContent = text;
+  note.classList.toggle('is-error', isError);
+}
+
+const PRIVACY = 'Encrypted in your browser: only people with the link can read it. Not even md.wtvr.sh can.';
+
+async function renderSharePanel() {
+  const d = current();
+  const panel = $('share-panel');
+  if (!d || !sharePanelFor || sharePanelFor !== d.id) {
+    panel.hidden = true;
+    sharePanelFor = null;
+    $('share').setAttribute('aria-expanded', 'false');
+    return;
+  }
+  panel.hidden = false;
+  $('share').setAttribute('aria-expanded', 'true');
+  $('share-name').textContent = d.name;
+  const share = shareOf(d);
+  $('share-made').hidden = !share;
+  $('share-create').textContent = share ? 'Create a new link' : 'Create link';
+  $('share-lead').textContent = share ? 'Or make a new link, with what it says now, that expires after' : 'Share ';
+  $('share-name').hidden = !!share;
+  $('share-tail').textContent = share ? '' : ' as a link that expires after';
+  if (!share) {
+    shareNote(PRIVACY);
+    return;
+  }
+  $('share-link').value = share.link;
+  $('share-expires').textContent = 'Expires ' + shortDate(share.expires);
+  if (d.editor) syncDraft(d);
+  const same = (await digestOf(sourceOf(d))) === share.digest;
+  if (sharePanelFor !== d.id || d.share !== share) return; // changed while hashing
+  shareNote(same ? PRIVACY : `You've changed ${d.name} since this link was made. It still shows the earlier version.`);
+}
+
+function openSharePanel(on = sharePanelFor == null) {
+  const d = current();
+  sharePanelFor = on && d ? d.id : null;
+  renderSharePanel();
+  if (sharePanelFor) {
+    const share = d.share;
+    if (share) $('share-link').select();
+    ($(share ? 'share-copy' : 'share-create')).focus();
+  }
+}
+
+async function copyShareLink(quiet = false) {
+  const input = $('share-link');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    toast('Link copied');
+  } catch (err) {
+    input.select(); // the browser said no: leave it selected for Ctrl/Cmd+C
+    if (!quiet) toast(`Copy the selected link with ${MOD}C`);
+  }
+}
+
+// The message for a failed request: the server's own when it sent one.
+async function serverMessage(res, fallback) {
+  try {
+    const body = await res.json();
+    if (body && typeof body.error === 'string') return body.error;
+  } catch (err) { /* not JSON */ }
+  return `${fallback} (${res.status})`;
+}
+
+const OFFLINE = `Couldn't reach ${location.host}. Check your connection and try again.`;
+
+async function createShare() {
+  const d = current();
+  if (!d || sharePanelFor !== d.id) return;
+  if (d.editor) syncDraft(d);
+  const text = sourceOf(d);
+  const days = Number($('share-days').value);
+  const button = $('share-create');
+  button.disabled = true;
+  shareNote('Encrypting and uploading…');
+  try {
+    const { bytes, key } = await packShare({ name: d.name, text });
+    if (bytes.length > SHARE_MAX) {
+      shareNote(`${d.name} is too big to share: shared files can be up to 1 MB compressed.`, true);
+      return;
+    }
+    let res;
+    try {
+      res = await fetch(`/api/shares?days=${days}`, { method: 'POST', body: bytes, headers: { 'Content-Type': 'application/octet-stream' } });
+    } catch (err) {
+      shareNote(OFFLINE, true);
+      return;
+    }
+    if (!res.ok) {
+      shareNote(await serverMessage(res, 'The link could not be made'), true);
+      return;
+    }
+    const { id, token, expires } = await res.json();
+    d.share = { id, token, expires, link: shareLink(location.origin, id, key), digest: await digestOf(text) };
+    rememberShare(d);
+    await renderSharePanel();
+    $('share-link').select();
+    $('share-copy').focus();
+    copyShareLink(true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function stopSharing() {
+  const d = current();
+  const share = d && shareOf(d);
+  if (!share) return;
+  const button = $('share-stop');
+  button.disabled = true;
+  try {
+    let res;
+    try {
+      res = await fetch(`/api/shares/${share.id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + share.token } });
+    } catch (err) {
+      shareNote(OFFLINE, true);
+      return;
+    }
+    if (!res.ok && res.status !== 404) {
+      shareNote(await serverMessage(res, 'The link could not be removed'), true);
+      return;
+    }
+    forgetShare(share.id);
+    if (d.share === share) d.share = null;
+    renderSharePanel();
+    toast('Stopped sharing. The link no longer works.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function bindShare() {
+  $('share').addEventListener('click', () => openSharePanel());
+  $('share-close').addEventListener('click', () => openSharePanel(false));
+  $('share-create').addEventListener('click', createShare);
+  $('share-copy').addEventListener('click', () => copyShareLink());
+  $('share-stop').addEventListener('click', stopSharing);
+  $('share-link').addEventListener('focus', (e) => e.target.select());
+  $('share-panel').addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    openSharePanel(false);
+    $('share').focus();
+  });
+}
+
+// The empty state's own words, put back once a document shows.
+let emptyDefault = null;
+function emptyMessage(title, text) {
+  if (!emptyDefault) emptyDefault = [$('empty-title').textContent, $('empty-text').textContent];
+  $('empty-title').textContent = title;
+  $('empty-text').textContent = text;
+}
+function restoreEmptyMessage() {
+  if (emptyDefault) emptyMessage(...emptyDefault);
+}
+
+// Opening md.wtvr.sh/are/<id>#<key>: fetch, decrypt, show. False (with the
+// reason in the empty state) when it can't.
+async function openShared({ id, key }) {
+  const problem = (title, text) => {
+    activateDoc(null);
+    emptyMessage(title, text);
+    return false;
+  };
+  if (!id || !key) {
+    return problem('This link is incomplete', 'Part of it is missing, often the end, after the #. Ask for it again, or copy the whole link.');
+  }
+  let res;
+  try {
+    res = await fetch(`/api/shares/${id}`, { cache: 'no-store' });
+  } catch (err) {
+    return problem(`Couldn't reach ${location.host}`, 'The shared file is stored there. Check your connection and reload the page.');
+  }
+  if (res.status === 404 || res.status === 410) {
+    return problem('This link has expired or was removed', 'Ask whoever sent it for a new one.');
+  }
+  if (!res.ok) return problem('The shared file could not be loaded', (await serverMessage(res, 'Server error')) + ' Try again later.');
+  let file;
+  try {
+    file = await unpackShare(new Uint8Array(await res.arrayBuffer()), key);
+  } catch (err) {
+    return problem(err.code === 'version' ? 'Shared from a newer md-whatever' : 'This link is damaged', err.message);
+  }
+  const d = makeDoc({ name: file.name, kind: 'shared', text: file.text, expires: res.headers.get('Mdw-Expires') || '' });
+  docs.push(d);
+  activateDoc(d.id);
+  return true;
+}
+
 /* ---------- the installed app: files opened from Finder or Explorer, offline, updates ---------- */
 
 // Chromium-based browsers, app installed: "Open With" md-whatever, or a
@@ -1833,7 +2091,7 @@ function serviceWorker() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (reloading) location.reload();
   });
-  navigator.serviceWorker.register('sw.js').then((reg) => {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((reg) => { // from the root: share links are /are/<id>
     // A new version waits until every window is closed; offer to switch now.
     const offer = () => {
       if (reg.waiting && navigator.serviceWorker.controller) $('update').hidden = false;
@@ -1913,6 +2171,7 @@ function isTyping(target) {
 let dragDepth = 0;
 function bind() {
   bindToolbar();
+  bindShare();
   const select = $('theme-select');
   for (const name of Object.keys(DATA.themes)) {
     if (name !== 'base') select.append(new Option(name, name));
@@ -2100,7 +2359,9 @@ async function start() {
     return;
   }
   host.dataset.engine = engine.kind;
-  openSample('welcome.md');
+  const link = hosted && parseShareLink(location.href);
+  if (link) await openShared(link); // a share link shows that file (or why it can't) instead of the welcome page
+  else openSample('welcome.md');
   acceptLaunches(); // files from a launch replace the welcome page, as any opened file does
   recent.load();
   serviceWorker();

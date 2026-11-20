@@ -289,3 +289,87 @@ test('the block at a position', () => {
   assert.deepEqual(lib.blockAt('text\n\n```\ncode\n```\n', 12), { block: 'code', list: null, quote: false });
   assert.deepEqual(lib.blockAt('---\na: b\n---\n', 5), { block: 'fm', list: null, quote: false });
 });
+
+/* ---------- sharing ---------- */
+
+test('shared files: encrypted, and back exactly', async () => {
+  for (const text of ['', '# Notes\r\n\r\nCRLF stays.\r\n', 'emoji 😀 and ünïcödé\n', 'x'.repeat(200000)]) {
+    const { bytes, key } = await lib.packShare({ name: 'notes.md', text });
+    assert.match(key, /^[A-Za-z0-9_-]{22}$/);
+    assert.equal(lib.fromBase64url(key).length, 16);
+    const back = await lib.unpackShare(bytes, key);
+    assert.deepEqual(back, { name: 'notes.md', text });
+  }
+  // compressed before it's encrypted
+  const big = await lib.packShare({ name: 'a.md', text: 'repeat '.repeat(50000) });
+  assert.ok(big.bytes.length < 5000, `${big.bytes.length} bytes`);
+  // the text isn't readable in the bytes
+  const { bytes } = await lib.packShare({ name: 'secret.md', text: 'the password is hunter2' });
+  assert.doesNotMatch(Buffer.from(bytes).toString('latin1'), /hunter2|secret/);
+  // a fresh key and IV every time
+  const a = await lib.packShare({ name: 'a.md', text: 'same' });
+  const b = await lib.packShare({ name: 'a.md', text: 'same' });
+  assert.notEqual(a.key, b.key);
+  assert.notDeepEqual(a.bytes, b.bytes);
+});
+
+test('shared files: wrong key, damaged bytes and odd names', async () => {
+  const { bytes, key } = await lib.packShare({ name: 'notes.md', text: 'hello' });
+  const other = await lib.packShare({ name: 'x.md', text: 'x' });
+  const damaged = async (b, k) => {
+    await assert.rejects(lib.unpackShare(b, k), (err) => err instanceof lib.ShareError && err.code === 'damaged');
+  };
+  await damaged(bytes, other.key);
+  await damaged(bytes, null);
+  await damaged(bytes, key.slice(0, 21));
+  await damaged(bytes, '!'.repeat(22));
+  await damaged(bytes.subarray(0, 20), key);
+  const flipped = bytes.slice();
+  flipped[flipped.length - 1] ^= 1;
+  await damaged(flipped, key);
+
+  // names are file names only; a missing one gets a default
+  const path = await lib.packShare({ name: '../../etc/passwd.md', text: 'x' });
+  assert.equal((await lib.unpackShare(path.bytes, path.key)).name, 'passwd.md');
+  const none = await lib.packShare({ name: '   ', text: 'x' });
+  assert.equal((await lib.unpackShare(none.bytes, none.key)).name, 'shared.md');
+});
+
+test('shared files: from a newer reader', async () => {
+  // what packShare does, with a version this reader doesn't know
+  const raw = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plain = new TextEncoder().encode(JSON.stringify({ v: lib.SHARE_VERSION + 1, name: 'a.md', text: 'x' }));
+  const zipped = new Uint8Array(await new Response(new Blob([plain]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+  const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt']);
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, zipped));
+  const bytes = new Uint8Array([...iv, ...sealed]);
+  await assert.rejects(lib.unpackShare(bytes, lib.toBase64url(raw)), (err) => err.code === 'version');
+});
+
+test('share links', () => {
+  const key = 'Tb8kQ2vX9mLpR4sN7wYc1A';
+  assert.equal(lib.shareLink('https://md.wtvr.sh', 'k3J9x2Hq7v', key), `https://md.wtvr.sh/are/k3J9x2Hq7v#${key}`);
+  assert.equal(lib.shareLink('http://127.0.0.1:8000/', 'k3J9x2Hq7v', key), `http://127.0.0.1:8000/are/k3J9x2Hq7v#${key}`);
+  const parse = lib.parseShareLink;
+  assert.deepEqual(parse(`https://md.wtvr.sh/are/k3J9x2Hq7v#${key}`), { id: 'k3J9x2Hq7v', key });
+  assert.deepEqual(parse(`https://md.wtvr.sh/are/k3J9x2Hq7v/#${key}`), { id: 'k3J9x2Hq7v', key });
+  assert.deepEqual(parse(`https://md.wtvr.sh/are/k3J9x2Hq7v#${key}).`), { id: 'k3J9x2Hq7v', key }, 'punctuation after it');
+  assert.deepEqual(parse('https://md.wtvr.sh/are/k3J9x2Hq7v'), { id: 'k3J9x2Hq7v', key: null }, 'the #part cut off');
+  assert.deepEqual(parse(`https://md.wtvr.sh/are/k3J9x2Hq7v#${key.slice(0, 15)}`), { id: 'k3J9x2Hq7v', key: null });
+  assert.deepEqual(parse(`https://md.wtvr.sh/are/k3J9#${key}`), { id: null, key });
+  assert.deepEqual(parse(`https://md.wtvr.sh/are/#${key}`), { id: null, key });
+  assert.equal(parse(`https://md.wtvr.sh/#${key}`), null);
+  assert.equal(parse('https://md.wtvr.sh/are/k3J9x2Hq7v/more'), null);
+  assert.equal(parse('https://md.wtvr.sh/area/k3J9x2Hq7v'), null);
+  assert.equal(parse('not a url'), null);
+});
+
+test('base64url', () => {
+  const all = Uint8Array.from({ length: 256 }, (_, i) => i);
+  const s = lib.toBase64url(all);
+  assert.match(s, /^[A-Za-z0-9_-]+$/);
+  assert.deepEqual(lib.fromBase64url(s), all);
+  assert.equal(lib.fromBase64url('a+b/'), null);
+  assert.deepEqual(lib.fromBase64url(''), new Uint8Array(0));
+});
