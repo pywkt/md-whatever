@@ -105,6 +105,14 @@ add_subdirectory(web)
 
 # --- install -----------------------------------------------------------------
 install(TARGETS md-whatever RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# mdw: the short command, a link to md-whatever (listed in the manifest, so
+# uninstall removes it too).
+install(CODE "
+  set(mdw_link \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/mdw\")
+  message(STATUS \"Installing: \${mdw_link}\")
+  file(CREATE_LINK md-whatever \"\${mdw_link}\" SYMBOLIC)
+  list(APPEND CMAKE_INSTALL_MANIFEST_FILES \"${CMAKE_INSTALL_FULL_BINDIR}/mdw\")
+")
 install(DIRECTORY ${MDW_DATA_BUILD_DIR}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/md-whatever)
 # Full path in Exec so launching from Dolphin works even if ~/.local/bin
 # isn't on the desktop session's PATH.

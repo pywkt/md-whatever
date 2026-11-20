@@ -18,7 +18,7 @@ So here it is. It's small, it's for Linux, and it does one thing. Try it,
 or don't. Whatever.
 
 ```
-md-whatever notes.md
+mdw notes.md
 ```
 
 Not on Linux? The same engine and themes also run in a browser tab:
@@ -35,8 +35,8 @@ Not on Linux? The same engine and themes also run in a browser tab:
   laptop. It's a native Qt app, not a browser in disguise.
 - **Double-click a `.md` file** in your file manager and it opens here (the
   installer offers to set that up).
-- **One window per file.** Open several at once with `md-whatever a.md b.md`,
-  or read from a pipe: `curl -s … | md-whatever -`.
+- **One window per file.** Open several at once with `mdw a.md b.md`,
+  or read from a pipe: `curl -s … | mdw -`.
 - **Live reload.** Save the file in your editor and the window updates on its
   own, keeping your place, even with editors that save by replacing the file.
 - **`e` opens the file in your editor**, the one your desktop uses for text
@@ -171,7 +171,7 @@ The script:
    are missing (this is the only step that asks for your password);
 2. builds md-whatever, which takes about half a minute;
 3. installs it into your home folder (`~/.local`), so nothing system-wide is
-   touched;
+   touched, as the command `mdw` (or `md-whatever`);
 4. asks whether `.md` files should open with md-whatever from now on, and
    remembers what they opened with before.
 
@@ -196,13 +196,15 @@ litehtml or a new enough Qt yet, so this may not be smooth everywhere.
 
 ## Using it
 
+The command is `mdw` (short for `md-whatever`, which works too).
+
 ```
-md-whatever FILE [FILE...]     open each file in its own window (paths or file:// URLs)
-md-whatever -                  read Markdown from stdin
-md-whatever --theme NAME FILE  use a theme just this once
-md-whatever --dump-html FILE   print the rendered HTML (after math) and exit
-md-whatever --time FILE        print startup timings
-md-whatever --version
+mdw FILE [FILE...]     open each file in its own window (paths or file:// URLs)
+mdw -                  read Markdown from stdin
+mdw --theme NAME FILE  use a theme just this once
+mdw --dump-html FILE   print the rendered HTML (after math) and exit
+mdw --time FILE        print startup timings
+mdw --version
 ```
 
 Want to see everything it can render? Open
@@ -261,7 +263,7 @@ why.
 | `~/.config/md-whatever/themes/*.css` | your themes |
 | `~/.config/md-whatever/state.conf` | remembered window size and zoom |
 | `~/.cache/md-whatever/math` | rendered equations (safe to delete) |
-| `~/.local/bin/md-whatever` | the program |
+| `~/.local/bin/md-whatever` | the program, and `mdw`, a link to it |
 
 The settings file is optional; md-whatever writes the `theme=` and `appearance=`
 lines itself when you use the menu, and leaves the rest of the file alone.
@@ -497,7 +499,7 @@ wasi-compiler-rt binaryen python`, and `chromium` for its browser tests.
 cmake -S . -B build -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/.local
 cmake --build build
 (cd build && ctest)                          # tests (offscreen; no windows pop up)
-cmake --install build                        # ~/.local/bin/md-whatever + data + .desktop
+cmake --install build                        # ~/.local/bin/md-whatever (+ mdw) + data + .desktop
 cmake --build build --target set-default     # make md-whatever open .md files
 ```
 

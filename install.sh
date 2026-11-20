@@ -68,7 +68,7 @@ uninstall() {
       info "md-whatever was your default for Markdown files; your system will pick another app."
     fi
   fi
-  rm -f "$PREFIX/bin/md-whatever" "$DESKTOP_FILE"
+  rm -f "$PREFIX/bin/md-whatever" "$PREFIX/bin/mdw" "$DESKTOP_FILE"
   rm -rf "$DATA_DIR"
   refresh_desktop_caches
   info "Done. Your settings (~/.config/md-whatever) and math cache (~/.cache/md-whatever) were kept;"
@@ -118,10 +118,10 @@ build_and_install() {
   bold "3/4  Installing into $PREFIX"
   cmake --install "$BUILD_DIR" >/dev/null || die "Installing failed (see the messages above)."
   refresh_desktop_caches
-  info "Installed $PREFIX/bin/md-whatever"
+  info "Installed $PREFIX/bin/md-whatever (and mdw, the short name)"
   case ":$PATH:" in
     *":$PREFIX/bin:"*) ;;
-    *) info "Note: $PREFIX/bin isn't on your PATH, so typing 'md-whatever' in a terminal won't"
+    *) info "Note: $PREFIX/bin isn't on your PATH, so typing 'mdw' in a terminal won't"
        info "work yet (opening files from your file manager will). To fix that, add this"
        info "line to ~/.bashrc (or your shell's startup file) and open a new terminal:"
        info "  export PATH=\"$PREFIX/bin:\$PATH\"" ;;
@@ -166,5 +166,5 @@ install_packages
 build_and_install
 offer_default
 bold "All set."
-info "Open a Markdown file from your file manager, or run: md-whatever FILE.md"
+info "Open a Markdown file from your file manager, or run: mdw FILE.md"
 info "Right-click a document for themes and light/dark. Update later by running this script again."
